@@ -68,3 +68,25 @@ it('pastes new signatures onto a system', function () {
 
     expect($system->signatures()->count())->toBe(2);
 });
+
+it('updates a signature alias', function () {
+    $map = Map::factory()->create();
+    $system = placeMapSolarsystem($map, 30011010);
+    $signature = $system->signatures()->create(['signature_id' => 'ABC-123']);
+
+    app(UpdateSignatureAction::class)->handle($signature, SignatureData::from(['alias' => 'a5s']));
+
+    expect($signature->fresh()->alias)->toBe('a5s');
+});
+
+it('keeps the alias when other signature fields change', function () {
+    $map = Map::factory()->create();
+    $system = placeMapSolarsystem($map, 30011011);
+    $signature = $system->signatures()->create(['signature_id' => 'ABC-123', 'alias' => 'b3a']);
+
+    app(UpdateSignatureAction::class)->handle($signature, SignatureData::from(['signature_id' => 'XYZ-999']));
+
+    expect($signature->fresh())
+        ->signature_id->toBe('XYZ-999')
+        ->alias->toBe('b3a');
+});
