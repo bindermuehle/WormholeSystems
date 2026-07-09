@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { classToTypeChar, generateAlias, nextBranchLetter, nextSlotLetter } from './alias';
+import { classToTypeChar, generateAlias, nextBranchLetter, nextSlotLetter, suggestSignatureAlias, usedHomeBranchLetters } from './alias';
 
 describe('classToTypeChar', () => {
     it('maps wormhole classes C1–C6 to their digit', () => {
@@ -117,5 +117,85 @@ describe('generateAlias', () => {
 
     it('does not apply the static slot to a non-home static', () => {
         expect(generateAlias({ ...base, isHomeStatic: true, targetClass: '5', originAlias: 'a5s', aliases: ['a5s'] })).toBe('a5a');
+    });
+});
+
+describe('usedHomeBranchLetters', () => {
+    it('returns the first letter of each direct home link alias', () => {
+        const aliases = new Map<number, string | null>([
+            [2, 'a5s'],
+            [3, 'b3a'],
+            [4, 'c1a'],
+        ]);
+        const connections = [
+            { from_map_solarsystem_id: 1, to_map_solarsystem_id: 2 },
+            { from_map_solarsystem_id: 3, to_map_solarsystem_id: 1 },
+        ];
+
+        expect(usedHomeBranchLetters(1, connections, aliases).sort()).toEqual(['a', 'b']);
+    });
+
+    it('ignores connections that do not touch home', () => {
+        const aliases = new Map<number, string | null>([[4, 'c1a']]);
+        const connections = [{ from_map_solarsystem_id: 3, to_map_solarsystem_id: 4 }];
+
+        expect(usedHomeBranchLetters(1, connections, aliases)).toEqual([]);
+    });
+
+    it('returns nothing when there is no home system', () => {
+        expect(usedHomeBranchLetters(null, [], new Map())).toEqual([]);
+    });
+
+    it('strips a leading "+" from a neighbour alias', () => {
+        const aliases = new Map<number, string | null>([[2, '+a5s']]);
+        const connections = [{ from_map_solarsystem_id: 1, to_map_solarsystem_id: 2 }];
+
+        expect(usedHomeBranchLetters(1, connections, aliases)).toEqual(['a']);
+    });
+});
+
+describe('suggestSignatureAlias', () => {
+    const base = {
+        originSolarsystemId: 31000005,
+        homeSolarsystemId: 31000005,
+        wormholeCode: null as string | null,
+        homeStaticCodes: [] as string[],
+        homeBranchLetters: [] as string[],
+        aliases: [] as string[],
+    };
+
+    it('names the home static when the wormhole code matches a home static', () => {
+        expect(suggestSignatureAlias({ ...base, originAlias: null, targetClass: '5', wormholeCode: 'N062', homeStaticCodes: ['N062'] })).toBe('a5s');
+    });
+
+    it('does not use the static slot for a non-static hole off home', () => {
+        expect(
+            suggestSignatureAlias({
+                ...base,
+                originAlias: null,
+                targetClass: '3',
+                wormholeCode: 'K162',
+                homeStaticCodes: ['N062'],
+                homeBranchLetters: ['a'],
+                aliases: ['a5s'],
+            }),
+        ).toBe('b3a');
+    });
+
+    it('inherits the branch when the origin is not home', () => {
+        expect(
+            suggestSignatureAlias({
+                ...base,
+                originSolarsystemId: 31000010,
+                originAlias: 'b3a',
+                targetClass: '4',
+                wormholeCode: 'K162',
+                aliases: ['a5s', 'b3a'],
+            }),
+        ).toBe('b4a');
+    });
+
+    it('returns null when the destination class is unknown', () => {
+        expect(suggestSignatureAlias({ ...base, originAlias: 'a5s', targetClass: null, wormholeCode: 'K162' })).toBeNull();
     });
 });

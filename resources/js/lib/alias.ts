@@ -174,3 +174,80 @@ export function generateAlias(context: AliasContext): string | null {
 
     return `${branch}${type}${slot}`;
 }
+
+type ConnectionEndpoints = {
+    from_map_solarsystem_id: number;
+    to_map_solarsystem_id: number;
+};
+
+/**
+ * The branch letters currently in use by the home system's direct links — the
+ * first character of each directly-connected system's alias. Feeds
+ * `nextBranchLetter` when naming a brand-new link off home. Connections are
+ * treated as undirected. `homeMapSolarsystemId` is a map_solarsystem id (not a
+ * raw solarsystem id), matching the connection endpoint ids.
+ */
+export function usedHomeBranchLetters(
+    homeMapSolarsystemId: number | null | undefined,
+    connections: readonly ConnectionEndpoints[],
+    aliasByMapSolarsystemId: ReadonlyMap<number, string | null | undefined>,
+): string[] {
+    if (homeMapSolarsystemId == null) {
+        return [];
+    }
+
+    const letters: string[] = [];
+    for (const connection of connections) {
+        let neighbourId: number | null = null;
+        if (connection.from_map_solarsystem_id === homeMapSolarsystemId) {
+            neighbourId = connection.to_map_solarsystem_id;
+        } else if (connection.to_map_solarsystem_id === homeMapSolarsystemId) {
+            neighbourId = connection.from_map_solarsystem_id;
+        }
+
+        if (neighbourId === null) {
+            continue;
+        }
+
+        const letter = aliasByMapSolarsystemId.get(neighbourId)?.trim().replace(/^\+/, '').charAt(0);
+        if (letter) {
+            letters.push(letter);
+        }
+    }
+
+    return letters;
+}
+
+/**
+ * Suggest the chain alias for the destination of a wormhole signature scanned in
+ * a given system. Thin adapter over `generateAlias` that derives `originIsHome`
+ * and detects the home static (the origin is home and the signature's wormhole
+ * code is one of home's static codes). Returns null when the destination class
+ * is unknown/unnamed.
+ */
+export function suggestSignatureAlias(input: {
+    originSolarsystemId: number | null | undefined;
+    originAlias: string | null | undefined;
+    homeSolarsystemId: number | null | undefined;
+    targetClass: TStringedSolarsystemClass | null | undefined;
+    wormholeCode: string | null | undefined;
+    homeStaticCodes: readonly string[];
+    homeBranchLetters: readonly string[];
+    aliases: readonly string[];
+}): string | null {
+    if (!input.targetClass) {
+        return null;
+    }
+
+    const originIsHome = input.originSolarsystemId != null && input.originSolarsystemId === input.homeSolarsystemId;
+    const isHomeStatic = originIsHome && input.wormholeCode != null && input.homeStaticCodes.includes(input.wormholeCode);
+
+    return generateAlias({
+        originAlias: input.originAlias,
+        originIsHome,
+        targetClass: input.targetClass,
+        isHomeStatic,
+        homeBranchLetters: input.homeBranchLetters,
+        aliases: input.aliases,
+    });
+}
