@@ -114,3 +114,36 @@ it('updates the alias and occupier of a tracked system afterwards', function () 
                 && $system['occupier_alias'] === 'Lazerhawks');
     });
 });
+
+it('hands off the alias reserved on a signature to the tracked system', function () {
+    $map = Map::factory()->create();
+    $origin = placeMapSolarsystem($map, 30012010);
+    $targetId = makeSolarsystem(30012011);
+    $signature = $origin->signatures()->create(['signature_id' => 'ABC-123', 'alias' => 'a5s']);
+
+    app(StoreTrackingAction::class)->handle(TrackingData::from([
+        'from_map_solarsystem_id' => $origin->id,
+        'to_solarsystem_id' => $targetId,
+        'signature_id' => $signature->id,
+    ]));
+
+    $target = $map->mapSolarsystems()->where('solarsystem_id', $targetId)->firstOrFail();
+    expect($target->alias)->toBe('a5s');
+});
+
+it('prefers an explicit tracking alias over the signature alias', function () {
+    $map = Map::factory()->create();
+    $origin = placeMapSolarsystem($map, 30012012);
+    $targetId = makeSolarsystem(30012013);
+    $signature = $origin->signatures()->create(['signature_id' => 'ABC-123', 'alias' => 'a5s']);
+
+    app(StoreTrackingAction::class)->handle(TrackingData::from([
+        'from_map_solarsystem_id' => $origin->id,
+        'to_solarsystem_id' => $targetId,
+        'signature_id' => $signature->id,
+        'alias' => 'b3a',
+    ]));
+
+    $target = $map->mapSolarsystems()->where('solarsystem_id', $targetId)->firstOrFail();
+    expect($target->alias)->toBe('b3a');
+});
