@@ -7,7 +7,9 @@ import { useTrackingSystems } from '@/composables/useTrackingSystems';
 import { suggestSignatureAlias, usedHomeBranchLetters } from '@/lib/alias';
 import { formatBookmarkName } from '@/lib/bookmark';
 import { createTracking, updateMapUserSettings, useMapSolarsystems } from '@/map/api';
+import { show } from '@/routes/maps';
 import { TLifetimeStatus, TMassStatus, TSignature } from '@/types/models';
+import { router } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
 
@@ -71,6 +73,11 @@ export function useTracking() {
         });
     });
 
+    // The system the active character just jumped into, pending selection. We
+    // select it once it is on the map — a wormhole jump only adds the system
+    // after tracking runs, so we cannot select it synchronously.
+    const follow_target_solarsystem_id = ref<number | null>(null);
+
     watch(
         () => [character.value?.id, character.value?.status?.solarsystem_id] as const,
         ([new_character_id, new_solarsystem_id], [old_character_id, old_solarsystem_id]) => {
@@ -82,9 +89,30 @@ export function useTracking() {
             // but that must not create a connection between the two characters' systems.
             if (new_character_id !== old_character_id) return;
 
+            follow_target_solarsystem_id.value = new_solarsystem_id;
             handleSolarsystemJump(old_solarsystem_id, new_solarsystem_id);
         },
     );
+
+    // Follow the pilot: once the jumped-into system is on the map, select it so
+    // the signature panel and details follow the character. Cleared as soon as
+    // it is fulfilled (or already selected) so a later manual selection sticks.
+    watch([follow_target_solarsystem_id, map_solarsystems], () => {
+        const target = follow_target_solarsystem_id.value;
+        if (target === null) return;
+        if (page.props.selected_map_solarsystem?.solarsystem_id === target) {
+            follow_target_solarsystem_id.value = null;
+            return;
+        }
+        if (!map_solarsystems.value.some((s) => s.solarsystem_id === target)) return;
+
+        follow_target_solarsystem_id.value = null;
+        router.visit(show(page.props.map.slug, { mergeQuery: { solarsystem_id: target } }).url, {
+            preserveScroll: true,
+            preserveState: true,
+            only: ['map', 'selected_map_solarsystem', 'map_navigation', 'map_characters', 'eve_scout_connections', 'threat_analysis'],
+        });
+    });
 
     function handleSolarsystemJump(old_solarsystem_id: number | null, new_solarsystem_id: number) {
         if (isIgnored(new_solarsystem_id)) return;
