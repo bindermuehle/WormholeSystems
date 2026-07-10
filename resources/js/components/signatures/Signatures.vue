@@ -16,7 +16,9 @@ import { useSignatures } from '@/composables/signatures/useSignatures';
 import { useSortableSignatures } from '@/composables/signatures/useSortedSignatures';
 import { useActiveMapCharacter } from '@/composables/useActiveMapCharacter';
 import usePermission from '@/composables/usePermission';
-import { createSignature } from '@/map/api';
+import { useShowMap } from '@/composables/useShowMap';
+import { type AliasSuggestionContext, usedHomeBranchLetters } from '@/lib/alias';
+import { createSignature, useMapSolarsystems } from '@/map/api';
 import type { TResolvedSelectedMapSolarsystem } from '@/pages/maps';
 import { useLocalStorage } from '@vueuse/core';
 import { ArrowDown, ArrowUp, CircleHelp, Cloud, Database, Fan, Gem, Landmark, Shield, Swords } from 'lucide-vue-next';
@@ -27,6 +29,9 @@ const props = defineProps<{
 }>();
 
 const { connections } = useSignatures();
+
+const page = useShowMap();
+const { map_solarsystems: all_map_solarsystems } = useMapSolarsystems();
 
 const { canEdit: can_write } = usePermission();
 
@@ -86,6 +91,28 @@ const unconnected_connections = computed(() => {
             return signature.map_connection_id === connection.id;
         });
     });
+});
+
+// Map-level inputs for the automapper, computed once and shared by every row.
+// The alias pool pulls both live system aliases and the reserved aliases of the
+// selected system's signatures, so concurrent scouts naming holes in the same
+// system get distinct suggestions rather than colliding.
+const alias_context = computed<AliasSuggestionContext>(() => {
+    const homeSolarsystemId = page.props.map.home_solarsystem_id;
+    const systems = all_map_solarsystems.value;
+    const home = systems.find((system) => system.solarsystem_id === homeSolarsystemId) ?? null;
+    const aliasByMapSolarsystemId = new Map(systems.map((system) => [system.id, system.alias] as const));
+
+    const systemAliases = systems.map((system) => system.alias);
+    const reservedAliases = (signatures.value ?? []).map((signature) => signature.alias);
+    const aliases = [...new Set([...systemAliases, ...reservedAliases].filter((alias): alias is string => Boolean(alias)))];
+
+    return {
+        homeSolarsystemId,
+        homeStaticCodes: (home?.solarsystem.statics ?? []).map((wormhole_static) => wormhole_static.name),
+        homeBranchLetters: usedHomeBranchLetters(home?.id ?? null, page.props.map.map_connections, aliasByMapSolarsystemId),
+        aliases,
+    };
 });
 
 function handleSort(column: 'id' | 'category' | 'type' | 'age') {
@@ -205,6 +232,7 @@ function createNewSignature() {
                     :unconnected_connections="unconnected_connections"
                     :connected_connections="connected_connections"
                     :selected_map_solarsystem="map_solarsystem"
+                    :alias_context="alias_context"
                 />
             </template>
             <div v-else class="flex h-full flex-col items-center justify-center gap-2 p-4">

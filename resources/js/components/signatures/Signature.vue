@@ -19,6 +19,7 @@ import { useMapUserSettings } from '@/composables/useMapUserSettings';
 import usePermission from '@/composables/usePermission';
 import { getTypesByCategory, signatureCategories } from '@/const/signatures';
 import { classSortWeight } from '@/const/solarsystemClasses';
+import { type AliasSuggestionContext, suggestSignatureAlias } from '@/lib/alias';
 import { Data } from '@/lib/data';
 import { formatDateToISO } from '@/lib/utils';
 import { deleteSignature, TProcessedConnection, updateMapConnection, updateSignature } from '@/map/api';
@@ -31,7 +32,7 @@ import { Check, Cloud, Database, Fan, Gem, Heart, Landmark, MoreVertical, Shield
 import { AcceptableValue } from 'reka-ui';
 import { type Component, computed, nextTick, ref, toRef } from 'vue';
 
-const { signature, unconnected_connections, connected_connections, selected_map_solarsystem } = defineProps<{
+const { signature, unconnected_connections, connected_connections, selected_map_solarsystem, alias_context } = defineProps<{
     signature: TSignature;
     is_deleted?: boolean;
     is_new?: boolean;
@@ -39,6 +40,7 @@ const { signature, unconnected_connections, connected_connections, selected_map_
     unconnected_connections: TProcessedConnection[];
     connected_connections: TProcessedConnection[];
     selected_map_solarsystem: TResolvedSelectedMapSolarsystem;
+    alias_context: AliasSuggestionContext;
 }>();
 
 const original = toRef(() => signature.signature_id || '');
@@ -85,6 +87,23 @@ const isWormhole = computed(() => {
 const current_class = computed(() => {
     if (!selected_connection.value?.target) return null;
     return selected_connection.value.target.solarsystem.class;
+});
+
+// The automapper's proposed chain alias for an unconnected wormhole. Only a
+// hint — nothing is stored until the scout opens the field and confirms it.
+const suggested_alias = computed<string | null>(() => {
+    if (!isWormhole.value || selected_connection.value || signature.alias) return null;
+
+    return suggestSignatureAlias({
+        originSolarsystemId: selected_map_solarsystem.solarsystem_id,
+        originAlias: selected_map_solarsystem.alias,
+        homeSolarsystemId: alias_context.homeSolarsystemId,
+        targetClass: signature.signature_type?.target_class ?? null,
+        wormholeCode: signature.wormhole?.name ?? null,
+        homeStaticCodes: alias_context.homeStaticCodes,
+        homeBranchLetters: alias_context.homeBranchLetters,
+        aliases: alias_context.aliases,
+    });
 });
 
 const map_user_settings = useMapUserSettings();
@@ -188,7 +207,7 @@ function cancelEditId() {
 
 function startEditAlias() {
     if (!can_write.value) return;
-    alias_input.value = signature.alias || '';
+    alias_input.value = signature.alias || suggested_alias.value || '';
     editingAlias.value = true;
     nextTick(() => {
         aliasInputRef.value?.focus();
@@ -344,7 +363,9 @@ function handleTogglePreserveMass() {
                         :class="can_write ? 'cursor-pointer' : 'cursor-default'"
                         @click="startEditAlias"
                     >
-                        {{ signature.alias || '—' }}
+                        <span v-if="signature.alias">{{ signature.alias }}</span>
+                        <span v-else-if="suggested_alias" class="text-muted-foreground/50 italic">{{ suggested_alias }}</span>
+                        <span v-else>—</span>
                     </button>
                 </template>
             </template>

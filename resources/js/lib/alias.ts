@@ -219,6 +219,22 @@ export function usedHomeBranchLetters(
 }
 
 /**
+ * Map-level inputs the signature table needs to suggest chain aliases, computed
+ * once for the whole map and shared by every signature row. Per-signature inputs
+ * (origin, destination class, wormhole code) are derived in the row itself.
+ */
+export type AliasSuggestionContext = {
+    /** The map's home system (raw solarsystem id), or null when unset. */
+    homeSolarsystemId: number | null;
+    /** Wormhole codes of home's statics — used to detect the home static hole. */
+    homeStaticCodes: string[];
+    /** Branch letters already claimed by home's live direct links. */
+    homeBranchLetters: string[];
+    /** Every alias in play on the map, including reserved pre-jump ones. */
+    aliases: string[];
+};
+
+/**
  * Suggest the chain alias for the destination of a wormhole signature scanned in
  * a given system. Thin adapter over `generateAlias` that derives `originIsHome`
  * and detects the home static (the origin is home and the signature's wormhole
