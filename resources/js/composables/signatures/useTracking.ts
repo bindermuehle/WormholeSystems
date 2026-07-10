@@ -4,9 +4,8 @@ import { useMapUserSettings } from '@/composables/useMapUserSettings';
 import { useShowMap } from '@/composables/useShowMap';
 import { useStaticData } from '@/composables/useStaticData';
 import { useTrackingSystems } from '@/composables/useTrackingSystems';
-import { suggestAlias } from '@/lib/alias';
+import { suggestSignatureAlias, usedHomeBranchLetters } from '@/lib/alias';
 import { formatBookmarkName } from '@/lib/bookmark';
-import { isWormholeSystem } from '@/lib/solarsystem';
 import { createTracking, updateMapUserSettings, useMapSolarsystems } from '@/map/api';
 import { TLifetimeStatus, TMassStatus, TSignature } from '@/types/models';
 import { computed, ref, watch } from 'vue';
@@ -41,7 +40,10 @@ export function useTracking() {
     });
 
     // Pre-fill the signature dialog's alias field. An alias the target already
-    // carries on the map wins; otherwise we guess the next chain alias.
+    // carries on the map wins; otherwise we suggest the next corp chain alias.
+    // The specific hole isn't known here (the scout picks the signature after),
+    // so the home-static ("s") slot is left to the signature table — this is a
+    // best-effort default the scout confirms or overrides.
     const suggested_alias = computed(() => {
         if (existing_map_solarsystem.value?.alias) {
             return existing_map_solarsystem.value.alias;
@@ -53,11 +55,19 @@ export function useTracking() {
         const target = target_solarsystem.value;
         if (!origin || !target) return null;
 
-        return suggestAlias({
-            parentAlias: origin.alias,
-            targetIsWormhole: isWormholeSystem(target),
-            originIsWormhole: isWormholeSystem(origin.solarsystem),
-            aliases: map_solarsystems.value.map((s) => s.alias).filter((alias): alias is string => Boolean(alias)),
+        const systems = map_solarsystems.value;
+        const home = systems.find((s) => s.solarsystem_id === page.props.map.home_solarsystem_id) ?? null;
+        const alias_by_map_solarsystem_id = new Map(systems.map((s) => [s.id, s.alias] as const));
+
+        return suggestSignatureAlias({
+            originSolarsystemId: origin.solarsystem_id,
+            originAlias: origin.alias,
+            homeSolarsystemId: page.props.map.home_solarsystem_id,
+            targetClass: target.class,
+            wormholeCode: null,
+            homeStaticCodes: (home?.solarsystem.statics ?? []).map((wormhole_static) => wormhole_static.name),
+            homeBranchLetters: usedHomeBranchLetters(home?.id ?? null, page.props.map.map_connections, alias_by_map_solarsystem_id),
+            aliases: systems.map((s) => s.alias).filter((alias): alias is string => Boolean(alias)),
         });
     });
 
