@@ -70,11 +70,17 @@ watch(open, (isOpen) => {
     }
 });
 
-// Adopt the signature's lifetime / mass when it carries a meaningful value,
-// otherwise keep whatever the user manually selected.
+// Adopt the signature's reserved alias / lifetime / mass when it carries a
+// meaningful value, otherwise keep whatever the user manually selected. The
+// alias the scout already set on the signature (e.g. the home static's "a5s")
+// wins over the dialog's generic suggestion, which cannot tell which hole this
+// is and would otherwise overwrite it.
 watch(selectedSignatureId, (id) => {
     const signature = props.signatures?.find((s) => s.id === id);
     if (!signature) return;
+    if (signature.alias) {
+        alias.value = signature.alias;
+    }
     if (signature.lifetime && signature.lifetime !== 'healthy') {
         lifetime.value = signature.lifetime;
     }
