@@ -136,6 +136,12 @@ export type AliasContext = {
     isHomeStatic: boolean;
     /** Branch letters already used by the home system's live direct links. */
     homeBranchLetters: readonly string[];
+    /**
+     * How many statics home has. Their branch letters are reserved — the "a"
+     * chain always belongs to the static — so a non-static link off home never
+     * takes them, even before the static has been scanned.
+     */
+    homeStaticCount: number;
     /** Every alias currently on the map, including reserved pre-jump aliases. */
     aliases: readonly string[];
 };
@@ -154,7 +160,16 @@ export function generateAlias(context: AliasContext): string | null {
 
     let branch: string;
     if (context.originIsHome) {
-        branch = nextBranchLetter(context.homeBranchLetters);
+        if (context.isHomeStatic) {
+            // The static claims the lowest free branch letter, so the primary
+            // static reads "a…s".
+            branch = nextBranchLetter(context.homeBranchLetters);
+        } else {
+            // Home's static branches are reserved even before the static is
+            // scanned, so a non-static link off home starts past them.
+            const reserved = BRANCH_LETTERS.slice(0, Math.max(0, context.homeStaticCount));
+            branch = nextBranchLetter([...context.homeBranchLetters, ...reserved]);
+        }
     } else {
         const inherited = (context.originAlias ?? '').trim().replace(/^\+/, '').charAt(0);
         if (!inherited) {
@@ -313,6 +328,7 @@ export function suggestSignatureAlias(input: {
         targetClass: input.targetClass,
         isHomeStatic,
         homeBranchLetters: input.homeBranchLetters,
+        homeStaticCount: input.homeStaticCodes.length,
         aliases: input.aliases,
     });
 }

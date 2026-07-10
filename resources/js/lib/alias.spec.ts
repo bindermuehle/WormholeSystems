@@ -73,8 +73,21 @@ describe('generateAlias', () => {
         originIsHome: false,
         isHomeStatic: false,
         homeBranchLetters: [] as string[],
+        homeStaticCount: 1,
         aliases: [] as string[],
     };
+
+    it('reserves the "a" branch for the static, so the first non-static home link is "b"', () => {
+        expect(generateAlias({ ...base, originIsHome: true, targetClass: '4', originAlias: null })).toBe('b4a');
+    });
+
+    it('does not reserve a branch when home has no statics', () => {
+        expect(generateAlias({ ...base, originIsHome: true, homeStaticCount: 0, targetClass: '4', originAlias: null })).toBe('a4a');
+    });
+
+    it('reserves two branches when home has two statics', () => {
+        expect(generateAlias({ ...base, originIsHome: true, homeStaticCount: 2, targetClass: '4', originAlias: null })).toBe('c4a');
+    });
 
     it('names the home static as "a5s"', () => {
         expect(generateAlias({ ...base, originIsHome: true, isHomeStatic: true, targetClass: '5', originAlias: null })).toBe('a5s');
