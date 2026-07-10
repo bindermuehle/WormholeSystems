@@ -15,14 +15,15 @@ import { usePasteSignatures } from '@/composables/signatures/usePasteSignatures'
 import { useSignatures } from '@/composables/signatures/useSignatures';
 import { useSortableSignatures } from '@/composables/signatures/useSortedSignatures';
 import { useActiveMapCharacter } from '@/composables/useActiveMapCharacter';
+import { useMapUserSettings } from '@/composables/useMapUserSettings';
 import usePermission from '@/composables/usePermission';
 import { useShowMap } from '@/composables/useShowMap';
 import { type AliasSuggestionContext, parentTowardHome, suggestSignatureAliases, usedHomeBranchLetters } from '@/lib/alias';
-import { createSignature, useMapSolarsystems } from '@/map/api';
+import { createSignature, updateSignature, useMapSolarsystems } from '@/map/api';
 import type { TResolvedSelectedMapSolarsystem } from '@/pages/maps';
 import { useLocalStorage } from '@vueuse/core';
 import { ArrowDown, ArrowUp, CircleHelp, Cloud, Database, Fan, Gem, Landmark, Shield, Swords } from 'lucide-vue-next';
-import { type Component, computed } from 'vue';
+import { type Component, computed, watch } from 'vue';
 
 const props = defineProps<{
     map_solarsystem: TResolvedSelectedMapSolarsystem | null;
@@ -34,6 +35,8 @@ const page = useShowMap();
 const { map_solarsystems: all_map_solarsystems } = useMapSolarsystems();
 
 const { canEdit: can_write } = usePermission();
+
+const map_user_settings = useMapUserSettings();
 
 const character = useActiveMapCharacter();
 
@@ -122,7 +125,7 @@ const selected_is_home = computed(() => props.map_solarsystem != null && props.m
 // signature id; rows read their own entry.
 const suggested_aliases = computed<Map<number, string | null>>(() => {
     const selected = props.map_solarsystem;
-    if (!selected) return new Map();
+    if (!selected || !map_user_settings.value.suggest_alias_enabled) return new Map();
 
     // Branch letters reserved on home's own signatures (set before the hole is
     // connected) also count, so a fresh link off home skips them.
@@ -150,6 +153,31 @@ const suggested_aliases = computed<Map<number, string | null>>(() => {
         signatures: pending,
     });
 });
+
+// Persist each suggestion the moment it is generated, so a scanned wormhole is
+// named with zero clicks — the scout can still overwrite it. Once saved, the
+// signature carries the alias and drops out of the suggestion map, so this
+// writes each signature at most once (the guard set covers transient re-renders
+// and stops a cleared alias from being re-applied against the scout's intent).
+const auto_named = new Set<number>();
+watch(
+    suggested_aliases,
+    (suggestions) => {
+        if (!can_write.value) return;
+        // One write per tick: each save reloads the map, which recomputes the
+        // suggestions and re-fires this watcher for the next one. Sequencing this
+        // way avoids concurrent Inertia visits cancelling one another.
+        for (const [id, suggestion] of suggestions) {
+            if (!suggestion || auto_named.has(id)) continue;
+            const signature = signatures.value.find((candidate) => candidate.id === id);
+            if (!signature || signature.alias) continue;
+            auto_named.add(id);
+            updateSignature(signature, { alias: suggestion });
+            return;
+        }
+    },
+    { immediate: true },
+);
 
 // The selected system's neighbour toward home — the hole back home, which each
 // row marks with a "+".
