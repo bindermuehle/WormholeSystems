@@ -184,6 +184,7 @@ function createNewSignature() {
                     <ArrowDown v-if="sortPreferences.column === 'type' && sortPreferences.direction === 'desc'" class="size-3" />
                 </button>
                 <span class="min-w-0 flex-1">Conn</span>
+                <span class="w-14 shrink-0">Alias</span>
                 <button class="flex w-10 shrink-0 items-center justify-end gap-1 hover:text-foreground" @click="handleSort('age')">
                     <span>Age</span>
                     <ArrowUp v-if="sortPreferences.column === 'age' && sortPreferences.direction === 'asc'" class="size-3" />

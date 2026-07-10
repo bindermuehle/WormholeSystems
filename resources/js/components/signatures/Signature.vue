@@ -51,6 +51,10 @@ const { canEdit: can_write } = usePermission();
 const editingId = ref(false);
 const idInputRef = ref<HTMLInputElement | null>(null);
 
+const editingAlias = ref(false);
+const aliasInputRef = ref<HTMLInputElement | null>(null);
+const alias_input = ref('');
+
 const selected_connection = computed(() => {
     return (
         unconnected_connections.find((c) => c.id === signature.map_connection_id) ??
@@ -182,6 +186,29 @@ function cancelEditId() {
     signature_id.value = signature.signature_id || '';
 }
 
+function startEditAlias() {
+    if (!can_write.value) return;
+    alias_input.value = signature.alias || '';
+    editingAlias.value = true;
+    nextTick(() => {
+        aliasInputRef.value?.focus();
+        aliasInputRef.value?.select();
+    });
+}
+
+function saveAlias() {
+    const newAlias = alias_input.value.trim();
+    if (newAlias !== (signature.alias || '')) {
+        handleChange({ alias: newAlias || null });
+    }
+    editingAlias.value = false;
+}
+
+function cancelEditAlias() {
+    editingAlias.value = false;
+    alias_input.value = signature.alias || '';
+}
+
 function handleLifetimeChange(lifetime: AcceptableValue) {
     handleChange({
         lifetime: lifetime as string,
@@ -290,6 +317,37 @@ function handleTogglePreserveMass() {
                 :disabled="!can_write"
                 @update:model-value="handleMapConnectionChange"
             />
+        </div>
+
+        <!-- Alias -->
+        <div class="w-14 shrink-0">
+            <template v-if="isWormhole">
+                <!-- Once jumped, the destination system owns the alias; reflect it read-only here. -->
+                <span v-if="selected_connection?.target" class="font-mono text-xs text-sky-300">
+                    {{ selected_connection.target.alias || '—' }}
+                </span>
+                <template v-else>
+                    <input
+                        v-if="editingAlias"
+                        ref="aliasInputRef"
+                        v-model="alias_input"
+                        @blur="saveAlias"
+                        @keydown.enter="saveAlias"
+                        @keydown.escape="cancelEditAlias"
+                        class="h-6 w-full rounded border border-border/50 bg-background/50 px-1.5 font-mono text-xs focus:border-primary focus:outline-none"
+                        maxlength="8"
+                        placeholder="alias"
+                    />
+                    <button
+                        v-else
+                        class="font-mono text-xs hover:text-amber-400"
+                        :class="can_write ? 'cursor-pointer' : 'cursor-default'"
+                        @click="startEditAlias"
+                    >
+                        {{ signature.alias || '—' }}
+                    </button>
+                </template>
+            </template>
         </div>
 
         <!-- Age -->

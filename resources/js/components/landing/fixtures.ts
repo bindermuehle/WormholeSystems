@@ -496,6 +496,7 @@ function signature(input: SignatureInput): TSignature {
         map_solarsystem_id: 1,
         map_connection_id: input.map_connection_id ?? null,
         signature_id: input.signature_id,
+        alias: null,
         signature_type_id: signature_type?.id ?? null,
         signature_category_id: category.id,
         raw_type_name: isWormhole ? null : (input.typeName ?? null),
