@@ -316,3 +316,67 @@ export function suggestSignatureAlias(input: {
         aliases: input.aliases,
     });
 }
+
+/**
+ * Suggest aliases for several wormhole signatures scanned in the same system, in
+ * a single accumulating pass: each suggestion is folded into the alias pool (and,
+ * off home, the branch-letter set) before the next is generated, so siblings get
+ * distinct names instead of all proposing the first free branch/slot. Returns a
+ * map keyed by the caller's signature id; a signature the scheme cannot name maps
+ * to null.
+ *
+ * Home statics are named first so the primary static reads "a…s" — the corp's
+ * convention — rather than losing the "a" branch to whichever hole sorts first.
+ */
+export function suggestSignatureAliases(input: {
+    originSolarsystemId: number | null | undefined;
+    originAlias: string | null | undefined;
+    homeSolarsystemId: number | null | undefined;
+    homeStaticCodes: readonly string[];
+    homeBranchLetters: readonly string[];
+    aliases: readonly string[];
+    signatures: ReadonlyArray<{
+        id: number;
+        targetClass: TStringedSolarsystemClass | null | undefined;
+        wormholeCode: string | null | undefined;
+    }>;
+}): Map<number, string | null> {
+    const originIsHome = input.originSolarsystemId != null && input.originSolarsystemId === input.homeSolarsystemId;
+    const isStatic = (wormholeCode: string | null | undefined): boolean =>
+        originIsHome && wormholeCode != null && input.homeStaticCodes.includes(wormholeCode);
+
+    const ordered = input.signatures
+        .map((signature, index) => ({ signature, index }))
+        .sort((a, b) => {
+            const staticRank = Number(isStatic(b.signature.wormholeCode)) - Number(isStatic(a.signature.wormholeCode));
+            return staticRank !== 0 ? staticRank : a.index - b.index;
+        });
+
+    const pool = [...input.aliases];
+    const branchLetters = [...input.homeBranchLetters];
+    const result = new Map<number, string | null>();
+
+    for (const { signature } of ordered) {
+        const suggestion = suggestSignatureAlias({
+            originSolarsystemId: input.originSolarsystemId,
+            originAlias: input.originAlias,
+            homeSolarsystemId: input.homeSolarsystemId,
+            targetClass: signature.targetClass,
+            wormholeCode: signature.wormholeCode,
+            homeStaticCodes: input.homeStaticCodes,
+            homeBranchLetters: branchLetters,
+            aliases: pool,
+        });
+
+        result.set(signature.id, suggestion);
+
+        if (suggestion) {
+            pool.push(suggestion);
+            if (originIsHome) {
+                branchLetters.push(suggestion.charAt(0));
+            }
+        }
+    }
+
+    return result;
+}

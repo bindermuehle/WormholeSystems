@@ -7,6 +7,7 @@ import {
     nextSlotLetter,
     parentTowardHome,
     suggestSignatureAlias,
+    suggestSignatureAliases,
     usedHomeBranchLetters,
 } from './alias';
 
@@ -237,5 +238,84 @@ describe('suggestSignatureAlias', () => {
 
     it('returns null when the destination class is unknown', () => {
         expect(suggestSignatureAlias({ ...base, originAlias: 'a5s', targetClass: null, wormholeCode: 'K162' })).toBeNull();
+    });
+});
+
+describe('suggestSignatureAliases', () => {
+    const home = {
+        originSolarsystemId: 31000005,
+        originAlias: null as string | null,
+        homeSolarsystemId: 31000005,
+        homeStaticCodes: ['N062'] as string[],
+        homeBranchLetters: [] as string[],
+        aliases: [] as string[],
+    };
+
+    it('gives two direct home links distinct branch letters', () => {
+        const result = suggestSignatureAliases({
+            ...home,
+            signatures: [
+                { id: 1, targetClass: '5', wormholeCode: 'N062' }, // the C5 home static
+                { id: 2, targetClass: '4', wormholeCode: 'K162' }, // a second link off home
+            ],
+        });
+
+        expect(result.get(1)).toBe('a5s');
+        expect(result.get(2)).toBe('b4a');
+    });
+
+    it('names the home static "a…s" regardless of scan order', () => {
+        const result = suggestSignatureAliases({
+            ...home,
+            signatures: [
+                { id: 2, targetClass: '4', wormholeCode: 'K162' }, // non-static listed first
+                { id: 1, targetClass: '5', wormholeCode: 'N062' }, // static listed second
+            ],
+        });
+
+        expect(result.get(1)).toBe('a5s');
+        expect(result.get(2)).toBe('b4a');
+    });
+
+    it('advances the slot for sibling holes down the same branch off a non-home system', () => {
+        const result = suggestSignatureAliases({
+            originSolarsystemId: 31000010,
+            originAlias: 'b3a',
+            homeSolarsystemId: 31000005,
+            homeStaticCodes: [],
+            homeBranchLetters: [],
+            aliases: ['a5s', 'b3a'],
+            signatures: [
+                { id: 1, targetClass: '4', wormholeCode: 'K162' },
+                { id: 2, targetClass: '4', wormholeCode: 'K162' },
+            ],
+        });
+
+        expect(result.get(1)).toBe('b4a');
+        expect(result.get(2)).toBe('b4b');
+    });
+
+    it('skips a branch letter already reserved on home', () => {
+        const result = suggestSignatureAliases({
+            ...home,
+            homeBranchLetters: ['a'], // "a" already taken (e.g. an accepted static)
+            aliases: ['a5s'],
+            signatures: [{ id: 1, targetClass: '4', wormholeCode: 'K162' }],
+        });
+
+        expect(result.get(1)).toBe('b4a');
+    });
+
+    it('maps non-wormhole and unnamed signatures to null without consuming a letter', () => {
+        const result = suggestSignatureAliases({
+            ...home,
+            signatures: [
+                { id: 1, targetClass: null, wormholeCode: null }, // a data/relic site
+                { id: 2, targetClass: '5', wormholeCode: 'N062' }, // the static still gets "a"
+            ],
+        });
+
+        expect(result.get(1)).toBeNull();
+        expect(result.get(2)).toBe('a5s');
     });
 });

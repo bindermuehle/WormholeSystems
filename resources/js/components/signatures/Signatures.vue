@@ -17,7 +17,7 @@ import { useSortableSignatures } from '@/composables/signatures/useSortedSignatu
 import { useActiveMapCharacter } from '@/composables/useActiveMapCharacter';
 import usePermission from '@/composables/usePermission';
 import { useShowMap } from '@/composables/useShowMap';
-import { type AliasSuggestionContext, parentTowardHome, usedHomeBranchLetters } from '@/lib/alias';
+import { type AliasSuggestionContext, parentTowardHome, suggestSignatureAliases, usedHomeBranchLetters } from '@/lib/alias';
 import { createSignature, useMapSolarsystems } from '@/map/api';
 import type { TResolvedSelectedMapSolarsystem } from '@/pages/maps';
 import { useLocalStorage } from '@vueuse/core';
@@ -113,6 +113,42 @@ const alias_context = computed<AliasSuggestionContext>(() => {
         homeBranchLetters: usedHomeBranchLetters(home?.id ?? null, page.props.map.map_connections, aliasByMapSolarsystemId),
         aliases,
     };
+});
+
+const selected_is_home = computed(() => props.map_solarsystem != null && props.map_solarsystem.solarsystem_id === page.props.map.home_solarsystem_id);
+
+// Suggested aliases for every unconnected, unnamed wormhole in this system,
+// generated in one accumulating pass so siblings get distinct names. Keyed by
+// signature id; rows read their own entry.
+const suggested_aliases = computed<Map<number, string | null>>(() => {
+    const selected = props.map_solarsystem;
+    if (!selected) return new Map();
+
+    // Branch letters reserved on home's own signatures (set before the hole is
+    // connected) also count, so a fresh link off home skips them.
+    const reserved_home_letters = selected_is_home.value
+        ? signatures.value
+              .map((signature) => signature.alias?.trim().replace(/^\+/, '').charAt(0))
+              .filter((letter): letter is string => Boolean(letter))
+        : [];
+
+    const pending = signatures.value
+        .filter((signature) => signature.map_connection_id == null && !signature.alias)
+        .map((signature) => ({
+            id: signature.id,
+            targetClass: signature.signature_type?.target_class ?? null,
+            wormholeCode: signature.wormhole?.name ?? null,
+        }));
+
+    return suggestSignatureAliases({
+        originSolarsystemId: selected.solarsystem_id,
+        originAlias: selected.alias,
+        homeSolarsystemId: alias_context.value.homeSolarsystemId,
+        homeStaticCodes: alias_context.value.homeStaticCodes,
+        homeBranchLetters: [...alias_context.value.homeBranchLetters, ...reserved_home_letters],
+        aliases: alias_context.value.aliases,
+        signatures: pending,
+    });
 });
 
 // The selected system's neighbour toward home — the hole back home, which each
@@ -241,7 +277,7 @@ function createNewSignature() {
                     :unconnected_connections="unconnected_connections"
                     :connected_connections="connected_connections"
                     :selected_map_solarsystem="map_solarsystem"
-                    :alias_context="alias_context"
+                    :suggested_alias="suggested_aliases.get(signature.id) ?? null"
                     :homeward_map_solarsystem_id="homeward_map_solarsystem_id"
                 />
             </template>
