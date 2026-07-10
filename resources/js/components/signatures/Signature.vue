@@ -32,16 +32,18 @@ import { Check, Cloud, Database, Fan, Gem, Heart, Landmark, MoreVertical, Shield
 import { AcceptableValue } from 'reka-ui';
 import { type Component, computed, nextTick, ref, toRef } from 'vue';
 
-const { signature, unconnected_connections, connected_connections, selected_map_solarsystem, alias_context } = defineProps<{
-    signature: TSignature;
-    is_deleted?: boolean;
-    is_new?: boolean;
-    is_updated?: boolean;
-    unconnected_connections: TProcessedConnection[];
-    connected_connections: TProcessedConnection[];
-    selected_map_solarsystem: TResolvedSelectedMapSolarsystem;
-    alias_context: AliasSuggestionContext;
-}>();
+const { signature, unconnected_connections, connected_connections, selected_map_solarsystem, alias_context, homeward_map_solarsystem_id } =
+    defineProps<{
+        signature: TSignature;
+        is_deleted?: boolean;
+        is_new?: boolean;
+        is_updated?: boolean;
+        unconnected_connections: TProcessedConnection[];
+        connected_connections: TProcessedConnection[];
+        selected_map_solarsystem: TResolvedSelectedMapSolarsystem;
+        alias_context: AliasSuggestionContext;
+        homeward_map_solarsystem_id: number | null;
+    }>();
 
 const original = toRef(() => signature.signature_id || '');
 const signature_id = ref('');
@@ -87,6 +89,20 @@ const isWormhole = computed(() => {
 const current_class = computed(() => {
     if (!selected_connection.value?.target) return null;
     return selected_connection.value.target.solarsystem.class;
+});
+
+// A connected hole is the way home when its destination is the selected
+// system's parent toward home; the corp marks that hole's alias with a "+".
+const is_homeward = computed(() => {
+    const target_id = selected_connection.value?.target?.id;
+    return target_id != null && target_id === homeward_map_solarsystem_id;
+});
+
+const connected_alias_display = computed<string>(() => {
+    const target = selected_connection.value?.target;
+    if (!target) return '';
+    const marker = is_homeward.value ? '+' : '';
+    return target.alias ? `${marker}${target.alias}` : marker || '—';
 });
 
 // The automapper's proposed chain alias for an unconnected wormhole. Only a
@@ -343,7 +359,7 @@ function handleTogglePreserveMass() {
             <template v-if="isWormhole">
                 <!-- Once jumped, the destination system owns the alias; reflect it read-only here. -->
                 <span v-if="selected_connection?.target" class="font-mono text-xs text-sky-300">
-                    {{ selected_connection.target.alias || '—' }}
+                    {{ connected_alias_display }}
                 </span>
                 <template v-else>
                     <input

@@ -17,7 +17,7 @@ import { useSortableSignatures } from '@/composables/signatures/useSortedSignatu
 import { useActiveMapCharacter } from '@/composables/useActiveMapCharacter';
 import usePermission from '@/composables/usePermission';
 import { useShowMap } from '@/composables/useShowMap';
-import { type AliasSuggestionContext, usedHomeBranchLetters } from '@/lib/alias';
+import { type AliasSuggestionContext, parentTowardHome, usedHomeBranchLetters } from '@/lib/alias';
 import { createSignature, useMapSolarsystems } from '@/map/api';
 import type { TResolvedSelectedMapSolarsystem } from '@/pages/maps';
 import { useLocalStorage } from '@vueuse/core';
@@ -113,6 +113,15 @@ const alias_context = computed<AliasSuggestionContext>(() => {
         homeBranchLetters: usedHomeBranchLetters(home?.id ?? null, page.props.map.map_connections, aliasByMapSolarsystemId),
         aliases,
     };
+});
+
+// The selected system's neighbour toward home — the hole back home, which each
+// row marks with a "+".
+const homeward_map_solarsystem_id = computed<number | null>(() => {
+    const selected = props.map_solarsystem;
+    if (!selected) return null;
+    const home = all_map_solarsystems.value.find((system) => system.solarsystem_id === page.props.map.home_solarsystem_id) ?? null;
+    return parentTowardHome(home?.id ?? null, selected.id, page.props.map.map_connections);
 });
 
 function handleSort(column: 'id' | 'category' | 'type' | 'age') {
@@ -233,6 +242,7 @@ function createNewSignature() {
                     :connected_connections="connected_connections"
                     :selected_map_solarsystem="map_solarsystem"
                     :alias_context="alias_context"
+                    :homeward_map_solarsystem_id="homeward_map_solarsystem_id"
                 />
             </template>
             <div v-else class="flex h-full flex-col items-center justify-center gap-2 p-4">

@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { classToTypeChar, generateAlias, nextBranchLetter, nextSlotLetter, suggestSignatureAlias, usedHomeBranchLetters } from './alias';
+import {
+    classToTypeChar,
+    generateAlias,
+    nextBranchLetter,
+    nextSlotLetter,
+    parentTowardHome,
+    suggestSignatureAlias,
+    usedHomeBranchLetters,
+} from './alias';
 
 describe('classToTypeChar', () => {
     it('maps wormhole classes C1–C6 to their digit', () => {
@@ -151,6 +159,38 @@ describe('usedHomeBranchLetters', () => {
         const connections = [{ from_map_solarsystem_id: 1, to_map_solarsystem_id: 2 }];
 
         expect(usedHomeBranchLetters(1, connections, aliases)).toEqual(['a']);
+    });
+});
+
+describe('parentTowardHome', () => {
+    // home(1) — a(2) — b(3) — c(4), with a stray branch home(1) — d(5)
+    const connections = [
+        { from_map_solarsystem_id: 1, to_map_solarsystem_id: 2 },
+        { from_map_solarsystem_id: 2, to_map_solarsystem_id: 3 },
+        { from_map_solarsystem_id: 3, to_map_solarsystem_id: 4 },
+        { from_map_solarsystem_id: 1, to_map_solarsystem_id: 5 },
+    ];
+
+    it('returns the neighbour one hop closer to home', () => {
+        expect(parentTowardHome(1, 4, connections)).toBe(3);
+        expect(parentTowardHome(1, 3, connections)).toBe(2);
+        expect(parentTowardHome(1, 2, connections)).toBe(1);
+        expect(parentTowardHome(1, 5, connections)).toBe(1);
+    });
+
+    it('treats connections as undirected regardless of endpoint order', () => {
+        expect(
+            parentTowardHome(1, 3, [
+                { from_map_solarsystem_id: 3, to_map_solarsystem_id: 2 },
+                { from_map_solarsystem_id: 2, to_map_solarsystem_id: 1 },
+            ]),
+        ).toBe(2);
+    });
+
+    it('returns null for home itself, no home, or an unreachable system', () => {
+        expect(parentTowardHome(1, 1, connections)).toBeNull();
+        expect(parentTowardHome(null, 4, connections)).toBeNull();
+        expect(parentTowardHome(1, 99, connections)).toBeNull();
     });
 });
 

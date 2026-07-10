@@ -219,6 +219,55 @@ export function usedHomeBranchLetters(
 }
 
 /**
+ * The neighbour of `mapSolarsystemId` that lies one hop closer to home — its
+ * parent in the breadth-first tree rooted at home. The hole to this neighbour is
+ * the way back home, which the signature table marks with a "+". Returns null
+ * when there is no home, the system is home itself, or it is unreachable.
+ * Connections are undirected; ids are map_solarsystem ids.
+ */
+export function parentTowardHome(
+    homeMapSolarsystemId: number | null | undefined,
+    mapSolarsystemId: number | null | undefined,
+    connections: readonly ConnectionEndpoints[],
+): number | null {
+    if (homeMapSolarsystemId == null || mapSolarsystemId == null || homeMapSolarsystemId === mapSolarsystemId) {
+        return null;
+    }
+
+    const neighbours = new Map<number, number[]>();
+    const link = (a: number, b: number): void => {
+        const list = neighbours.get(a) ?? [];
+        list.push(b);
+        neighbours.set(a, list);
+    };
+    for (const connection of connections) {
+        link(connection.from_map_solarsystem_id, connection.to_map_solarsystem_id);
+        link(connection.to_map_solarsystem_id, connection.from_map_solarsystem_id);
+    }
+
+    const parent = new Map<number, number>();
+    const queue = [homeMapSolarsystemId];
+    const visited = new Set<number>([homeMapSolarsystemId]);
+
+    while (queue.length > 0) {
+        const current = queue.shift()!;
+        if (current === mapSolarsystemId) {
+            return parent.get(current) ?? null;
+        }
+        for (const neighbour of neighbours.get(current) ?? []) {
+            if (visited.has(neighbour)) {
+                continue;
+            }
+            visited.add(neighbour);
+            parent.set(neighbour, current);
+            queue.push(neighbour);
+        }
+    }
+
+    return null;
+}
+
+/**
  * Map-level inputs the signature table needs to suggest chain aliases, computed
  * once for the whole map and shared by every signature row. Per-signature inputs
  * (origin, destination class, wormhole code) are derived in the row itself.
