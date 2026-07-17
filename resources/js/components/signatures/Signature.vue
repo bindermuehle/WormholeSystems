@@ -100,8 +100,13 @@ const is_homeward = computed(() => {
 const connected_alias_display = computed<string>(() => {
     const target = selected_connection.value?.target;
     if (!target) return '';
-    const marker = is_homeward.value ? '+' : '';
-    return target.alias ? `${marker}${target.alias}` : marker || '—';
+    // The homeward hole is named for the system it lives in, marked with "+" to
+    // show it leads back toward home — e.g. c5b's way home reads "+c5b", not the
+    // parent's "+c5a". Other holes show their destination's alias.
+    if (is_homeward.value) {
+        return selected_map_solarsystem.alias ? `+${selected_map_solarsystem.alias}` : '+';
+    }
+    return target.alias || '—';
 });
 
 const map_user_settings = useMapUserSettings();
