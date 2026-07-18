@@ -18,7 +18,7 @@ import { useActiveMapCharacter } from '@/composables/useActiveMapCharacter';
 import { useMapUserSettings } from '@/composables/useMapUserSettings';
 import usePermission from '@/composables/usePermission';
 import { useShowMap } from '@/composables/useShowMap';
-import { type AliasSuggestionContext, parentTowardHome, suggestSignatureAliases, usedHomeBranchLetters } from '@/lib/alias';
+import { type AliasSuggestionContext, parentTowardHome, reachableFromHome, suggestSignatureAliases, usedHomeBranchLetters } from '@/lib/alias';
 import { createSignature, updateSignature, useMapSolarsystems } from '@/map/api';
 import type { TResolvedSelectedMapSolarsystem } from '@/pages/maps';
 import { useLocalStorage } from '@vueuse/core';
@@ -106,7 +106,12 @@ const alias_context = computed<AliasSuggestionContext>(() => {
     const home = systems.find((system) => system.solarsystem_id === homeSolarsystemId) ?? null;
     const aliasByMapSolarsystemId = new Map(systems.map((system) => [system.id, system.alias] as const));
 
-    const systemAliases = systems.map((system) => system.alias);
+    // Only count aliases of systems still reachable from home. A rolled-off
+    // (orphaned) system keeps its row until cleaned up, but its alias must stop
+    // occupying a slot — otherwise the next hole of that type inflates (e.g. a
+    // stale aLa forcing the next lowsec to aLb).
+    const reachable = reachableFromHome(home?.id ?? null, page.props.map.map_connections);
+    const systemAliases = systems.filter((system) => reachable === null || reachable.has(system.id)).map((system) => system.alias);
     const reservedAliases = (signatures.value ?? []).map((signature) => signature.alias);
     const aliases = [...new Set([...systemAliases, ...reservedAliases].filter((alias): alias is string => Boolean(alias)))];
 

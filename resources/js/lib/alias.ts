@@ -283,6 +283,45 @@ export function parentTowardHome(
 }
 
 /**
+ * The set of map_solarsystem ids reachable from home over the connection graph
+ * (home included). Used to keep the alias pool honest: a system that has been
+ * rolled off the chain is no longer reachable, so its alias should stop counting
+ * and free up for reuse — matching "letters are reused when a hole vanishes".
+ * Returns null when there is no home, meaning callers should not filter.
+ */
+export function reachableFromHome(homeMapSolarsystemId: number | null | undefined, connections: readonly ConnectionEndpoints[]): Set<number> | null {
+    if (homeMapSolarsystemId == null) {
+        return null;
+    }
+
+    const neighbours = new Map<number, number[]>();
+    const link = (a: number, b: number): void => {
+        const list = neighbours.get(a) ?? [];
+        list.push(b);
+        neighbours.set(a, list);
+    };
+    for (const connection of connections) {
+        link(connection.from_map_solarsystem_id, connection.to_map_solarsystem_id);
+        link(connection.to_map_solarsystem_id, connection.from_map_solarsystem_id);
+    }
+
+    const reachable = new Set<number>([homeMapSolarsystemId]);
+    const queue = [homeMapSolarsystemId];
+    while (queue.length > 0) {
+        const current = queue.shift()!;
+        for (const neighbour of neighbours.get(current) ?? []) {
+            if (reachable.has(neighbour)) {
+                continue;
+            }
+            reachable.add(neighbour);
+            queue.push(neighbour);
+        }
+    }
+
+    return reachable;
+}
+
+/**
  * Map-level inputs the signature table needs to suggest chain aliases, computed
  * once for the whole map and shared by every signature row. Per-signature inputs
  * (origin, destination class, wormhole code) are derived in the row itself.

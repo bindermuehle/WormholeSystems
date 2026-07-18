@@ -6,6 +6,7 @@ import {
     nextBranchLetter,
     nextSlotLetter,
     parentTowardHome,
+    reachableFromHome,
     suggestSignatureAlias,
     suggestSignatureAliases,
     usedHomeBranchLetters,
@@ -205,6 +206,56 @@ describe('parentTowardHome', () => {
         expect(parentTowardHome(1, 1, connections)).toBeNull();
         expect(parentTowardHome(null, 4, connections)).toBeNull();
         expect(parentTowardHome(1, 99, connections)).toBeNull();
+    });
+});
+
+describe('reachableFromHome', () => {
+    // home(1) — a(2) — b(3); c(4) is orphaned (rolled off, no connection)
+    const connections = [
+        { from_map_solarsystem_id: 1, to_map_solarsystem_id: 2 },
+        { from_map_solarsystem_id: 2, to_map_solarsystem_id: 3 },
+    ];
+
+    it('includes home and everything connected to it', () => {
+        const reachable = reachableFromHome(1, connections)!;
+        expect([...reachable].sort()).toEqual([1, 2, 3]);
+    });
+
+    it('excludes an orphaned (disconnected) system', () => {
+        const reachable = reachableFromHome(1, connections)!;
+        expect(reachable.has(4)).toBe(false);
+    });
+
+    it('returns null when there is no home (caller should not filter)', () => {
+        expect(reachableFromHome(null, connections)).toBeNull();
+    });
+});
+
+describe('first hole of a type in a branch (regression for aLb bug)', () => {
+    const base = {
+        originSolarsystemId: 100,
+        originAlias: 'a5s',
+        homeSolarsystemId: 1,
+        homeStaticCodes: ['N062'],
+        homeBranchLetters: ['a'],
+    };
+
+    it('names the first lowsec in the A chain aLa, not aLb', () => {
+        const result = suggestSignatureAliases({
+            ...base,
+            aliases: ['a5s', 'a5a', 'a2a', 'a2b', 'c5a', 'bLa', 'aNa'],
+            signatures: [{ id: 1, targetClass: 'l', wormholeCode: 'K162' }],
+        });
+        expect(result.get(1)).toBe('aLa');
+    });
+
+    it('only inflates to aLb once a real aLa is in the pool', () => {
+        const result = suggestSignatureAliases({
+            ...base,
+            aliases: ['a5s', 'aLa'],
+            signatures: [{ id: 1, targetClass: 'l', wormholeCode: 'K162' }],
+        });
+        expect(result.get(1)).toBe('aLb');
     });
 });
 
