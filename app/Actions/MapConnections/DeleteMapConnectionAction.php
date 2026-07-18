@@ -53,6 +53,13 @@ final readonly class DeleteMapConnectionAction
             return;
         }
 
+        // Never auto-remove the map's home system. Clearing all of home's
+        // signatures strips its connections, which would otherwise flag home
+        // for removal and delete the entire map from under the corp.
+        if ($mapSolarsystem->solarsystem_id === $mapSolarsystem->map->home_solarsystem_id) {
+            return;
+        }
+
         if (! $mapSolarsystem->mapConnections()->exists()) {
             $this->deleteMapSolarsystemAction->handle($mapSolarsystem);
         }

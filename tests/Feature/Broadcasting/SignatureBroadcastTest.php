@@ -94,6 +94,30 @@ it('broadcasts the signature counts once for a bulk delete', function () {
     });
 });
 
+it('never removes the home system when clearing all of its signatures', function () {
+    $map = Map::factory()->create();
+    $home = placeMapSolarsystem($map, 31000005);
+    $map->update(['home_solarsystem_id' => $home->solarsystem_id]);
+    $child = placeMapSolarsystem($map, 31000010);
+
+    $connection = MapConnection::factory()->create([
+        'map_id' => $map->id,
+        'from_map_solarsystem_id' => $home->id,
+        'to_map_solarsystem_id' => $child->id,
+    ]);
+    $signature = $home->signatures()->create([
+        'signature_id' => 'ABC-123',
+        'map_connection_id' => $connection->id,
+    ]);
+
+    // Clearing home's only signature strips home's only connection. Home must
+    // still stand; the now-orphaned child is the one that gets cleaned up.
+    app(DeleteSignaturesAction::class)->handle($home, [$signature->id], remove_map_solarsystems: true);
+
+    expect(MapSolarsystem::query()->whereKey($home->id)->exists())->toBeTrue()
+        ->and(MapSolarsystem::query()->whereKey($child->id)->exists())->toBeFalse();
+});
+
 it('does not crash when a bulk delete also removes the system', function () {
     $map = Map::factory()->create();
     $origin = placeMapSolarsystem($map, 30023020);
