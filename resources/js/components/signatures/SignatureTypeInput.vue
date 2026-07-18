@@ -27,7 +27,7 @@ const selected_option = computed(() => {
 
 <template>
     <Select v-model="model" :disabled="!can_write || !category" v-model:open="open">
-        <SelectTrigger class="h-6 w-full text-xs">
+        <SelectTrigger class="h-5 w-full text-xs">
             <span v-if="hasRawTypeName" class="truncate text-foreground">{{ rawTypeName }}</span>
             <SelectValue v-else placeholder="Type">
                 <span v-if="selected_option" class="truncate">{{ selected_option?.name }}</span>

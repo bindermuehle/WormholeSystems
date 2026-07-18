@@ -14,7 +14,7 @@ defineProps<{
         <span :data-has-alias="map_solarsystem.alias !== null" class="data-[has-alias=true]:text-muted-foreground">{{
             map_solarsystem.solarsystem?.name
         }}</span>
-        <span v-if="map_solarsystem.occupier_alias" class="text-muted-foreground"> ({{ map_solarsystem.occupier_alias }})</span>
+        <span v-if="map_solarsystem.occupier_alias" class="text-foreground/80"> ({{ map_solarsystem.occupier_alias }})</span>
     </span>
 </template>
 

@@ -52,7 +52,7 @@ function filterByCurrentClass(option: TSignatureType) {
 
 <template>
     <Select v-model="model" :disabled="!can_write" v-model:open="open">
-        <SelectTrigger class="h-6 w-full text-xs">
+        <SelectTrigger class="h-5 w-full text-xs">
             <WormholeOption v-if="selected_signature" :wormhole="selected_signature" />
             <template v-else>
                 <span class="truncate text-muted-foreground">Type</span>

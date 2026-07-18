@@ -43,7 +43,7 @@ function isNotFilterable(type: TSignatureType | null | undefined): type is null 
 
 <template>
     <Select v-model:model-value="model" v-model:open="open" :disabled="disabled">
-        <SelectTrigger class="h-6 w-full text-xs">
+        <SelectTrigger class="h-5 w-full text-xs">
             <SelectValue as-child>
                 <span>
                     <span v-if="selected" class="inline-flex items-center gap-1">

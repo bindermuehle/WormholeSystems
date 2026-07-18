@@ -271,7 +271,7 @@ function createNewSignature() {
         <MapPanelContent>
             <!-- Header -->
             <div
-                class="flex items-center gap-2 border-b border-border/30 bg-muted/20 px-3 py-1.5 font-mono text-[10px] tracking-wider text-muted-foreground uppercase"
+                class="flex items-center gap-2 border-b border-border/30 bg-muted/20 px-3 py-0.5 font-mono text-[10px] tracking-wider text-muted-foreground uppercase"
             >
                 <button class="flex w-16 shrink-0 items-center gap-1 hover:text-foreground" @click="handleSort('id')">
                     <span>ID</span>

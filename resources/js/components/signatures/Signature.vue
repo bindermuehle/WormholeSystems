@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useMapUserSettings } from '@/composables/useMapUserSettings';
 import usePermission from '@/composables/usePermission';
 import { getTypesByCategory, signatureCategories } from '@/const/signatures';
-import { classSortWeight } from '@/const/solarsystemClasses';
+import { classSortWeight, isWormholeClass } from '@/const/solarsystemClasses';
 import { Data } from '@/lib/data';
 import { formatDateToISO } from '@/lib/utils';
 import { deleteSignature, TProcessedConnection, updateMapConnection, updateSignature } from '@/map/api';
@@ -74,7 +74,14 @@ const availableTypes = computed(() => {
 });
 
 const sortedAvailableTypes = computed(() => {
-    return availableTypes.value.toSorted((a, b) => classSortWeight(a.target_class) - classSortWeight(b.target_class));
+    // Wormhole destinations (C1–C6) come before k-space (H/L/N/P) — they are
+    // picked far more often — then each group keeps its class-number order.
+    return availableTypes.value.toSorted((a, b) => {
+        const aWormhole = isWormholeClass(a.target_class);
+        const bWormhole = isWormholeClass(b.target_class);
+        if (aWormhole !== bWormhole) return aWormhole ? -1 : 1;
+        return classSortWeight(a.target_class) - classSortWeight(b.target_class);
+    });
 });
 
 const wormholeCategoryId = computed(() => {
@@ -251,7 +258,7 @@ function handleTogglePreserveMass() {
 
 <template>
     <div
-        class="flex items-center gap-2 border-b border-border/30 px-3 py-1.5 hover:bg-muted/30 data-deleted:bg-red-500/10 data-new:bg-green-500/10 data-updated:bg-amber-500/15"
+        class="flex items-center gap-2 border-b border-border/30 px-3 py-0.5 hover:bg-muted/30 data-deleted:bg-red-500/10 data-new:bg-green-500/10 data-updated:bg-amber-500/15"
         :data-deleted="Data(is_deleted)"
         :data-new="Data(is_new)"
         :data-updated="Data(is_updated)"
@@ -266,7 +273,7 @@ function handleTogglePreserveMass() {
                 @blur="saveId"
                 @keydown.enter="saveId"
                 @keydown.escape="cancelEditId"
-                class="h-6 w-full rounded border border-border/50 bg-background/50 px-1.5 font-mono text-xs uppercase focus:border-primary focus:outline-none"
+                class="h-5 w-full rounded border border-border/50 bg-background/50 px-1.5 font-mono text-xs uppercase focus:border-primary focus:outline-none"
                 maxlength="7"
                 placeholder="XXX-XXX"
             />
@@ -283,7 +290,7 @@ function handleTogglePreserveMass() {
         <!-- Category -->
         <div class="w-24 shrink-0">
             <Select :model-value="signature.signature_category_id" @update:modelValue="handleCategoryChange" :disabled="!can_write">
-                <SelectTrigger class="h-6 w-full text-xs">
+                <SelectTrigger class="h-5 w-full text-xs">
                     <SelectValue placeholder="Category">
                         <span class="flex items-center gap-1">
                             <component
@@ -356,7 +363,7 @@ function handleTogglePreserveMass() {
                         @blur="saveAlias"
                         @keydown.enter="saveAlias"
                         @keydown.escape="cancelEditAlias"
-                        class="h-6 w-full rounded border border-border/50 bg-background/50 px-1.5 font-mono text-xs focus:border-primary focus:outline-none"
+                        class="h-5 w-full rounded border border-border/50 bg-background/50 px-1.5 font-mono text-xs focus:border-primary focus:outline-none"
                         maxlength="8"
                         placeholder="alias"
                     />
