@@ -107,10 +107,13 @@ export function useTracking() {
         if (!map_solarsystems.value.some((s) => s.solarsystem_id === target)) return;
 
         follow_target_solarsystem_id.value = null;
+        // Do NOT refetch map_characters here: the pilot list is map-global and
+        // unchanged by a selection, and pulling it during a jump raced the
+        // reverb-driven reload, occasionally duplicating the active pilot.
         router.visit(show(page.props.map.slug, { mergeQuery: { solarsystem_id: target } }).url, {
             preserveScroll: true,
             preserveState: true,
-            only: ['map', 'selected_map_solarsystem', 'map_navigation', 'map_characters', 'eve_scout_connections', 'threat_analysis'],
+            only: ['map', 'selected_map_solarsystem', 'map_navigation', 'eve_scout_connections', 'threat_analysis'],
         });
     });
 
