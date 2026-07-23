@@ -148,7 +148,7 @@ const suggested_aliases = computed<Map<number, string | null>>(() => {
             wormholeCode: signature.wormhole?.name ?? null,
         }));
 
-    return suggestSignatureAliases({
+    const result = suggestSignatureAliases({
         originSolarsystemId: selected.solarsystem_id,
         originAlias: selected.alias,
         homeSolarsystemId: alias_context.value.homeSolarsystemId,
@@ -157,6 +157,31 @@ const suggested_aliases = computed<Map<number, string | null>>(() => {
         aliases: alias_context.value.aliases,
         signatures: pending,
     });
+
+    // TEMP alias debugging — remove once the a5b slot-collision is diagnosed.
+    (window as { __ALIAS_DEBUG__?: boolean }).__ALIAS_DEBUG__ = true;
+    // eslint-disable-next-line no-console
+    console.log('[ALIAS-DEBUG] suggested_aliases', {
+        selected: { id: selected.id, solarsystem_id: selected.solarsystem_id, alias: selected.alias },
+        homeSolarsystemId: alias_context.value.homeSolarsystemId,
+        homeStaticCodes: alias_context.value.homeStaticCodes,
+        homeBranchLetters: alias_context.value.homeBranchLetters,
+        reserved_home_letters,
+        pool: alias_context.value.aliases,
+        allSystems: all_map_solarsystems.value.map((s) => ({ id: s.id, sys: s.solarsystem_id, alias: s.alias })),
+        selectedSignatures: signatures.value.map((s) => ({
+            id: s.id,
+            sig: s.signature_id,
+            alias: s.alias,
+            conn: s.map_connection_id,
+            wh: s.wormhole?.name ?? null,
+            target_class: s.signature_type?.target_class ?? null,
+        })),
+        pending,
+        result: [...result.entries()],
+    });
+
+    return result;
 });
 
 // Persist each suggestion the moment it is generated, so a scanned wormhole is

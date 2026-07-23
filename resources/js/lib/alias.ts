@@ -73,6 +73,19 @@ export function suggestAlias(params: {
 const BRANCH_LETTERS = 'abcdefghijklmnopqrstuvwxyz'.split('');
 
 /**
+ * Temporary alias-suggestion instrumentation. Emits tagged console output when
+ * `window.__ALIAS_DEBUG__` is set (Signatures.vue turns it on). Guarded so it
+ * stays silent in unit tests and production until explicitly enabled. Remove
+ * once the a5b slot-collision is diagnosed.
+ */
+function aliasDebug(...args: unknown[]): void {
+    if (typeof window !== 'undefined' && (window as { __ALIAS_DEBUG__?: boolean }).__ALIAS_DEBUG__) {
+        // eslint-disable-next-line no-console
+        console.log('[ALIAS-DEBUG]', ...args);
+    }
+}
+
+/**
  * Map a solarsystem class to the scheme's "type" character: C1–C6 → "1".."6",
  * high/low/null/pochven → "H"/"L"/"N"/"P". Returns null for classes the scheme
  * does not name (special wormhole classes, unknown).
@@ -122,7 +135,9 @@ export function nextSlotLetter(branch: string, type: string, aliases: readonly s
         }
     }
 
-    return BRANCH_LETTERS.find((letter) => letter !== 's' && !used.has(letter)) ?? null;
+    const chosen = BRANCH_LETTERS.find((letter) => letter !== 's' && !used.has(letter)) ?? null;
+    aliasDebug('nextSlotLetter', { prefix, aliases: [...aliases], usedSlots: [...used], chosen });
+    return chosen;
 }
 
 export type AliasContext = {
