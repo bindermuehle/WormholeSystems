@@ -92,4 +92,22 @@ final class Signature extends Model
     {
         return $this->belongsTo(SignatureCategory::class);
     }
+
+    protected static function booted(): void
+    {
+        self::updating(function (self $signature): void {
+            // A hole's reserved chain alias (e.g. "a5a") belongs to its
+            // destination system once the hole is connected — the jump copies it
+            // across. Keep the alias only while the hole is unconnected; the
+            // moment a connection is attached, drop the now-redundant leftover so
+            // it stops occupying a naming slot (a stale leftover on the homeward
+            // hole silently burned slot "a" and bumped later holes to "a5b"). An
+            // update that sets a new alias in the same breath is respected.
+            if ($signature->isDirty('map_connection_id')
+                && $signature->map_connection_id !== null
+                && ! $signature->isDirty('alias')) {
+                $signature->alias = null;
+            }
+        });
+    }
 }

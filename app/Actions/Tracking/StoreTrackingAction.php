@@ -114,16 +114,18 @@ final readonly class StoreTrackingAction
                 ]
             );
 
-            // Link the signature to the connection if provided
-            if ($data->signature_id) {
+            // Link the signature to the connection if provided. Route through the
+            // model (not a query-builder update) so the Signature::updating hook
+            // fires and drops the reserved alias now carried by the destination
+            // system above.
+            if ($data->signature_id && $signature instanceof Signature) {
                 $signature_update = ['map_connection_id' => $connection->id];
 
-                if ($signature instanceof Signature && $signature->signature_category_id === null) {
+                if ($signature->signature_category_id === null) {
                     $signature_update['signature_category_id'] = $this->getWormholeCategoryId();
                 }
 
-                Signature::query()->where('id', $data->signature_id)
-                    ->update($signature_update);
+                $signature->update($signature_update);
             }
 
         }, 10);
