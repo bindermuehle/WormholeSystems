@@ -18,7 +18,7 @@ import { useActiveMapCharacter } from '@/composables/useActiveMapCharacter';
 import { useMapUserSettings } from '@/composables/useMapUserSettings';
 import usePermission from '@/composables/usePermission';
 import { useShowMap } from '@/composables/useShowMap';
-import { type AliasSuggestionContext, parentTowardHome, reachableFromHome, suggestSignatureAliases, usedHomeBranchLetters } from '@/lib/alias';
+import { type AliasSuggestionContext, buildSuggestionAliasPool, parentTowardHome, suggestSignatureAliases, usedHomeBranchLetters } from '@/lib/alias';
 import { createSignature, updateSignature, useMapSolarsystems } from '@/map/api';
 import type { TResolvedSelectedMapSolarsystem } from '@/pages/maps';
 import { useLocalStorage } from '@vueuse/core';
@@ -106,14 +106,12 @@ const alias_context = computed<AliasSuggestionContext>(() => {
     const home = systems.find((system) => system.solarsystem_id === homeSolarsystemId) ?? null;
     const aliasByMapSolarsystemId = new Map(systems.map((system) => [system.id, system.alias] as const));
 
-    // Only count aliases of systems still reachable from home. A rolled-off
-    // (orphaned) system keeps its row until cleaned up, but its alias must stop
-    // occupying a slot — otherwise the next hole of that type inflates (e.g. a
-    // stale aLa forcing the next lowsec to aLb).
-    const reachable = reachableFromHome(home?.id ?? null, page.props.map.map_connections);
-    const systemAliases = systems.filter((system) => reachable === null || reachable.has(system.id)).map((system) => system.alias);
-    const reservedAliases = (signatures.value ?? []).map((signature) => signature.alias);
-    const aliases = [...new Set([...systemAliases, ...reservedAliases].filter((alias): alias is string => Boolean(alias)))];
+    const aliases = buildSuggestionAliasPool({
+        homeMapSolarsystemId: home?.id ?? null,
+        connections: page.props.map.map_connections,
+        systems,
+        selectedSignatures: signatures.value ?? [],
+    });
 
     return {
         homeSolarsystemId,
@@ -148,7 +146,7 @@ const suggested_aliases = computed<Map<number, string | null>>(() => {
             wormholeCode: signature.wormhole?.name ?? null,
         }));
 
-    const result = suggestSignatureAliases({
+    return suggestSignatureAliases({
         originSolarsystemId: selected.solarsystem_id,
         originAlias: selected.alias,
         homeSolarsystemId: alias_context.value.homeSolarsystemId,
@@ -157,35 +155,6 @@ const suggested_aliases = computed<Map<number, string | null>>(() => {
         aliases: alias_context.value.aliases,
         signatures: pending,
     });
-
-    // TEMP alias debugging — remove once the a5b slot-collision is diagnosed.
-    // Flat JSON so it is copy-pasteable without expanding console objects.
-    (window as { __ALIAS_DEBUG__?: boolean }).__ALIAS_DEBUG__ = true;
-    // eslint-disable-next-line no-console
-    console.log(
-        '[ALIAS-DEBUG-FLAT] ' +
-            JSON.stringify({
-                selected: { id: selected.id, solarsystem_id: selected.solarsystem_id, alias: selected.alias },
-                homeSolarsystemId: alias_context.value.homeSolarsystemId,
-                homeStaticCodes: alias_context.value.homeStaticCodes,
-                homeBranchLetters: alias_context.value.homeBranchLetters,
-                pool: alias_context.value.aliases,
-                allSystems: all_map_solarsystems.value.map((s) => ({ id: s.id, sys: s.solarsystem_id, alias: s.alias })),
-                connections: page.props.map.map_connections.map((c) => [c.from_map_solarsystem_id, c.to_map_solarsystem_id]),
-                selectedSignatures: signatures.value.map((s) => ({
-                    id: s.id,
-                    sig: s.signature_id,
-                    alias: s.alias,
-                    conn: s.map_connection_id,
-                    wh: s.wormhole?.name ?? null,
-                    tc: s.signature_type?.target_class ?? null,
-                })),
-                pending: pending.map((p) => [p.id, p.targetClass, p.wormholeCode]),
-                result: [...result.entries()],
-            }),
-    );
-
-    return result;
 });
 
 // Persist each suggestion the moment it is generated, so a scanned wormhole is

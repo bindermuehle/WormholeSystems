@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+    buildSuggestionAliasPool,
     classToTypeChar,
     generateAlias,
     nextBranchLetter,
@@ -228,6 +229,74 @@ describe('reachableFromHome', () => {
 
     it('returns null when there is no home (caller should not filter)', () => {
         expect(reachableFromHome(null, connections)).toBeNull();
+    });
+});
+
+describe('buildSuggestionAliasPool', () => {
+    it('counts aliases of systems reachable from home and skips orphans', () => {
+        // home(1) — a5s(2); orphaned(9) is rolled off and must not count.
+        const pool = buildSuggestionAliasPool({
+            homeMapSolarsystemId: 1,
+            connections: [{ from_map_solarsystem_id: 1, to_map_solarsystem_id: 2 }],
+            systems: [
+                { id: 1, alias: null },
+                { id: 2, alias: 'a5s' },
+                { id: 9, alias: 'a5a' },
+            ],
+            selectedSignatures: [],
+        });
+        expect(pool.sort()).toEqual(['a5s']);
+    });
+
+    it('reserves aliases of unconnected holes so concurrent scouts do not collide', () => {
+        const pool = buildSuggestionAliasPool({
+            homeMapSolarsystemId: 1,
+            connections: [{ from_map_solarsystem_id: 1, to_map_solarsystem_id: 2 }],
+            systems: [
+                { id: 1, alias: null },
+                { id: 2, alias: 'a5s' },
+            ],
+            selectedSignatures: [{ alias: 'a5a', map_connection_id: null }],
+        });
+        expect(pool.sort()).toEqual(['a5a', 'a5s']);
+    });
+
+    it('does NOT count a connected homeward hole\'s stale alias (regression for the a5b ghost)', () => {
+        // Reproduces the box state: selected a5s(2) has THB, the homeward K162
+        // back to home(1) via connection 59, still carrying its pre-jump auto
+        // name "a5a". That leftover must not burn slot "a".
+        const pool = buildSuggestionAliasPool({
+            homeMapSolarsystemId: 1,
+            connections: [
+                { from_map_solarsystem_id: 1, to_map_solarsystem_id: 2 },
+                { from_map_solarsystem_id: 2, to_map_solarsystem_id: 3 },
+            ],
+            systems: [
+                { id: 1, alias: null }, // home
+                { id: 2, alias: 'a5s' }, // selected
+                { id: 3, alias: 'a5m' }, // a real down-chain system
+            ],
+            selectedSignatures: [
+                { alias: null, map_connection_id: null }, // DMJ relic
+                { alias: 'a5a', map_connection_id: 59 }, // THB homeward — stale a5a, must be ignored
+                { alias: 'a5m', map_connection_id: 60 }, // VJJ — its system a5m is already counted
+                { alias: null, map_connection_id: null }, // YDP fresh
+            ],
+        });
+
+        expect(pool.sort()).toEqual(['a5m', 'a5s']);
+
+        // The next C5 in the A chain must therefore be a5a, not a5b.
+        const result = suggestSignatureAliases({
+            originSolarsystemId: 100,
+            originAlias: 'a5s',
+            homeSolarsystemId: 1,
+            homeStaticCodes: ['H296'],
+            homeBranchLetters: ['a'],
+            aliases: pool,
+            signatures: [{ id: 229, targetClass: '5', wormholeCode: 'K162' }],
+        });
+        expect(result.get(229)).toBe('a5a');
     });
 });
 
