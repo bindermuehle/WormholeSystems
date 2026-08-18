@@ -4,7 +4,7 @@ import { useMapUserSettings } from '@/composables/useMapUserSettings';
 import { useShowMap } from '@/composables/useShowMap';
 import { useStaticData } from '@/composables/useStaticData';
 import { useTrackingSystems } from '@/composables/useTrackingSystems';
-import { aliasTargetKind, suggestAlias } from '@/lib/alias';
+import { aliasTargetKind, suggestAlias, suggestSignatureAlias, usedHomeBranchLetters } from '@/lib/alias';
 import { buildSignatureBookmark } from '@/lib/bookmark';
 import { groupSignatureOptions } from '@/lib/signatureCompatibility';
 import { isWormholeSystem } from '@/lib/solarsystem';
@@ -60,6 +60,27 @@ export function useTracking() {
         const origin = origin_map_solarsystem.value;
         const target = target_solarsystem.value;
         if (!origin || !target) return null;
+
+        // Corp scheme: suggest the next <branch><type><slot>. The specific hole
+        // isn't known here (the scout picks the signature after), so the home
+        // static ("s") slot is left to the signature table — a best-effort
+        // default the scout confirms or overrides.
+        if (page.props.map.bookmark_alias_scheme === 'corp') {
+            const systems = map_solarsystems.value;
+            const home = systems.find((s) => s.solarsystem_id === page.props.map.home_solarsystem_id) ?? null;
+            const alias_by_map_solarsystem_id = new Map(systems.map((s) => [s.id, s.alias] as const));
+
+            return suggestSignatureAlias({
+                originSolarsystemId: origin.solarsystem_id,
+                originAlias: origin.alias,
+                homeSolarsystemId: page.props.map.home_solarsystem_id,
+                targetClass: target.class,
+                wormholeCode: null,
+                homeStaticCodes: (home?.solarsystem.statics ?? []).map((wormhole_static) => wormhole_static.name),
+                homeBranchLetters: usedHomeBranchLetters(home?.id ?? null, page.props.map.map_connections, alias_by_map_solarsystem_id),
+                aliases: known_aliases.value,
+            });
+        }
 
         const targetIsWormhole = isWormholeSystem(target);
 

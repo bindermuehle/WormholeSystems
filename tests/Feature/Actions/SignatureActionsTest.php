@@ -72,6 +72,28 @@ it('deletes a signature', function () {
     expect(Signature::find($signature->id))->toBeNull();
 });
 
+it('updates a signature alias', function () {
+    $map = Map::factory()->create();
+    $system = placeMapSolarsystem($map, 30011010);
+    $signature = $system->signatures()->create(['signature_id' => 'ABC-123']);
+
+    app(UpdateSignatureAction::class)->handle($signature, SignatureData::from(['alias' => 'a5s']));
+
+    expect($signature->fresh()->alias)->toBe('a5s');
+});
+
+it('keeps the alias when other signature fields change', function () {
+    $map = Map::factory()->create();
+    $system = placeMapSolarsystem($map, 30011011);
+    $signature = $system->signatures()->create(['signature_id' => 'ABC-123', 'alias' => 'b3a']);
+
+    app(UpdateSignatureAction::class)->handle($signature, SignatureData::from(['signature_id' => 'XYZ-999']));
+
+    expect($signature->fresh())
+        ->signature_id->toBe('XYZ-999')
+        ->alias->toBe('b3a');
+});
+
 it('deletes multiple signatures from a system', function () {
     $map = Map::factory()->create();
     $system = placeMapSolarsystem($map, 30011004);
@@ -136,7 +158,7 @@ it('syncs the connection ship size when pasting over a typed connected signature
         'mass_status' => 'fresh',
     ]);
     $wormhole = makeWormhole('X877', 375_000_000, 'c4');
-    $signature_type = App\Models\SignatureType::query()->where('signature', 'X877')->firstOrFail();
+    $signature_type = SignatureType::query()->where('signature', 'X877')->firstOrFail();
     $origin->signatures()->create([
         'signature_id' => 'AAA-111',
         'map_connection_id' => $connection->id,
@@ -169,7 +191,7 @@ it('syncs the connection ship size when storing an already-connected typed signa
         'mass_status' => 'fresh',
     ]);
     makeWormhole('X877', 375_000_000, 'c4');
-    $signature_type = App\Models\SignatureType::query()->where('signature', 'X877')->firstOrFail();
+    $signature_type = SignatureType::query()->where('signature', 'X877')->firstOrFail();
 
     app(StoreSignatureAction::class)->handle($origin, NewSignatureData::from([
         'signature_id' => 'NEW-001',

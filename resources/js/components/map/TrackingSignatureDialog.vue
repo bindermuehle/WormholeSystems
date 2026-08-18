@@ -159,6 +159,12 @@ watch(open, (isOpen) => {
 // wormhole type's size is not adopted here — it is derived as lockedShipSize.
 watch(selectedSignature, (signature) => {
     if (!signature) return;
+    // The alias the scout already reserved on the signature (e.g. the home
+    // static's "a5s") wins over the dialog's generic suggestion, which cannot
+    // tell which hole this is and would otherwise overwrite it.
+    if (signature.alias) {
+        alias.value = signature.alias;
+    }
     if (signature.lifetime && signature.lifetime !== 'healthy') {
         lifetime.value = signature.lifetime;
     }

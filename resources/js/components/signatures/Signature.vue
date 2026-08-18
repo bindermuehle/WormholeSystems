@@ -19,7 +19,7 @@ import { useMapUserSettings } from '@/composables/useMapUserSettings';
 import usePermission from '@/composables/usePermission';
 import { useShowMap } from '@/composables/useShowMap';
 import { getTypesByCategory, signatureCategories } from '@/const/signatures';
-import { classSortWeight } from '@/const/solarsystemClasses';
+import { classSortWeight, isWormholeClass } from '@/const/solarsystemClasses';
 import { buildSignatureBookmark } from '@/lib/bookmark';
 import { Data } from '@/lib/data';
 import { formatDateToISO } from '@/lib/utils';
@@ -34,15 +34,18 @@ import { AcceptableValue } from 'reka-ui';
 import { type Component, computed, nextTick, ref, toRef } from 'vue';
 import { toast } from 'vue-sonner';
 
-const { signature, unconnected_connections, connected_connections, selected_map_solarsystem } = defineProps<{
-    signature: TSignature;
-    is_deleted?: boolean;
-    is_new?: boolean;
-    is_updated?: boolean;
-    unconnected_connections: TProcessedConnection[];
-    connected_connections: TProcessedConnection[];
-    selected_map_solarsystem: TResolvedSelectedMapSolarsystem;
-}>();
+const { signature, unconnected_connections, connected_connections, selected_map_solarsystem, suggested_alias, homeward_map_solarsystem_id } =
+    defineProps<{
+        signature: TSignature;
+        is_deleted?: boolean;
+        is_new?: boolean;
+        is_updated?: boolean;
+        unconnected_connections: TProcessedConnection[];
+        connected_connections: TProcessedConnection[];
+        selected_map_solarsystem: TResolvedSelectedMapSolarsystem;
+        suggested_alias?: string | null;
+        homeward_map_solarsystem_id?: number | null;
+    }>();
 
 const original = toRef(() => signature.signature_id || '');
 const signature_id = ref('');
@@ -53,6 +56,10 @@ const { canEdit: can_write } = usePermission();
 // Inline editing state
 const editingId = ref(false);
 const idInputRef = ref<HTMLInputElement | null>(null);
+
+const editingAlias = ref(false);
+const aliasInputRef = ref<HTMLInputElement | null>(null);
+const alias_input = ref('');
 
 const selected_connection = computed(() => {
     return (
@@ -70,7 +77,14 @@ const availableTypes = computed(() => {
 });
 
 const sortedAvailableTypes = computed(() => {
-    return availableTypes.value.toSorted((a, b) => classSortWeight(a.target_class) - classSortWeight(b.target_class));
+    // Wormhole destinations (C1–C6) come before k-space (H/L/N/P) — they are
+    // picked far more often — then each group keeps its class-number order.
+    return availableTypes.value.toSorted((a, b) => {
+        const aWormhole = isWormholeClass(a.target_class);
+        const bWormhole = isWormholeClass(b.target_class);
+        if (aWormhole !== bWormhole) return aWormhole ? -1 : 1;
+        return classSortWeight(a.target_class) - classSortWeight(b.target_class);
+    });
 });
 
 const wormholeCategoryId = computed(() => {
@@ -84,6 +98,28 @@ const isWormhole = computed(() => {
 const current_class = computed(() => {
     if (!selected_connection.value?.target) return null;
     return selected_connection.value.target.solarsystem.class;
+});
+
+const showMap = useShowMap();
+const is_corp = computed(() => showMap.props.map.bookmark_alias_scheme === 'corp');
+
+// A connected hole is the way home when its destination is the selected
+// system's parent toward home; the corp marks that hole's alias with a "+".
+const is_homeward = computed(() => {
+    const target_id = selected_connection.value?.target?.id;
+    return target_id != null && target_id === homeward_map_solarsystem_id;
+});
+
+const connected_alias_display = computed<string>(() => {
+    const target = selected_connection.value?.target;
+    if (!target) return '';
+    // The homeward hole is named for the system it lives in, marked with "+" to
+    // show it leads back toward home — e.g. c5b's way home reads "+c5b", not the
+    // parent's "+c5a". Other holes show their destination's alias.
+    if (is_homeward.value) {
+        return selected_map_solarsystem.alias ? `+${selected_map_solarsystem.alias}` : '+';
+    }
+    return target.alias || '—';
 });
 
 const map_user_settings = useMapUserSettings();
@@ -186,6 +222,29 @@ function saveId() {
 function cancelEditId() {
     editingId.value = false;
     signature_id.value = signature.signature_id || '';
+}
+
+function startEditAlias() {
+    if (!can_write.value) return;
+    alias_input.value = signature.alias || suggested_alias || '';
+    editingAlias.value = true;
+    nextTick(() => {
+        aliasInputRef.value?.focus();
+        aliasInputRef.value?.select();
+    });
+}
+
+function saveAlias() {
+    const newAlias = alias_input.value.trim();
+    if (newAlias !== (signature.alias || '')) {
+        handleChange({ alias: newAlias || null });
+    }
+    editingAlias.value = false;
+}
+
+function cancelEditAlias() {
+    editingAlias.value = false;
+    alias_input.value = signature.alias || '';
 }
 
 function handleLifetimeChange(lifetime: AcceptableValue) {
@@ -319,6 +378,40 @@ function copyBookmark() {
                 :disabled="!can_write"
                 @update:model-value="handleMapConnectionChange"
             />
+        </div>
+
+        <!-- Alias (corp scheme only) -->
+        <div v-if="is_corp" class="w-14 shrink-0">
+            <template v-if="isWormhole">
+                <!-- Once jumped, the destination system owns the alias; reflect it read-only here. -->
+                <span v-if="selected_connection?.target" class="font-mono text-xs text-sky-300">
+                    {{ connected_alias_display }}
+                </span>
+                <template v-else>
+                    <input
+                        v-if="editingAlias"
+                        ref="aliasInputRef"
+                        v-model="alias_input"
+                        @blur="saveAlias"
+                        @keydown.enter="saveAlias"
+                        @keydown.escape="cancelEditAlias"
+                        class="w-full rounded border border-border/50 bg-background/50 px-1.5 font-mono text-xs focus:border-primary focus:outline-none"
+                        :class="map_user_settings.compact_signature_list ? 'h-5' : 'h-6'"
+                        maxlength="8"
+                        placeholder="alias"
+                    />
+                    <button
+                        v-else
+                        class="font-mono text-xs hover:text-amber-400"
+                        :class="can_write ? 'cursor-pointer' : 'cursor-default'"
+                        @click="startEditAlias"
+                    >
+                        <span v-if="signature.alias">{{ signature.alias }}</span>
+                        <span v-else-if="suggested_alias" class="text-muted-foreground/50 italic">{{ suggested_alias }}</span>
+                        <span v-else>—</span>
+                    </button>
+                </template>
+            </template>
         </div>
 
         <!-- Age -->

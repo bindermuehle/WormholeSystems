@@ -178,6 +178,7 @@ export type TSignature = {
     map_solarsystem_id: number;
     map_connection_id: number | null;
     signature_id: string | null;
+    alias: string | null;
     signature_type_id: number | null;
     signature_category_id: number | null;
     raw_type_name: string | null;

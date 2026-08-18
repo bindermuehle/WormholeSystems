@@ -18,17 +18,19 @@ import { useActiveMapCharacter } from '@/composables/useActiveMapCharacter';
 import { useMapUserSettings } from '@/composables/useMapUserSettings';
 import { useShowMap } from '@/composables/useShowMap';
 import usePermission from '@/composables/usePermission';
-import { createSignature, updateMapUserSettings } from '@/map/api';
+import { type AliasSuggestionContext, buildSuggestionAliasPool, parentTowardHome, suggestSignatureAliases, usedHomeBranchLetters } from '@/lib/alias';
+import { createSignature, updateMapUserSettings, updateSignature, useMapSolarsystems } from '@/map/api';
 import type { TResolvedSelectedMapSolarsystem } from '@/pages/maps';
 import { useLocalStorage } from '@vueuse/core';
 import { ArrowDown, ArrowUp, CircleHelp, Cloud, Database, Fan, Flag, Gem, Landmark, Rows2, Rows3, Shield, Swords } from 'lucide-vue-next';
-import { type Component, computed } from 'vue';
+import { type Component, computed, watch } from 'vue';
 
 const props = defineProps<{
     map_solarsystem: TResolvedSelectedMapSolarsystem | null;
 }>();
 
 const { connections } = useSignatures();
+const { map_solarsystems: all_map_solarsystems } = useMapSolarsystems();
 
 const { canEdit: can_write } = usePermission();
 
@@ -105,6 +107,106 @@ const unconnected_connections = computed(() => {
             return signature.map_connection_id === connection.id;
         });
     });
+});
+
+// The corp <branch><type><slot> automapper is opt-in per map via the alias
+// scheme. When another scheme is selected nothing below runs and the signature
+// table shows no alias column.
+const is_corp_scheme = computed(() => page.props.map.bookmark_alias_scheme === 'corp');
+
+// Map-level inputs for the automapper, computed once and shared by every row.
+// The alias pool pulls both live system aliases and the reserved aliases of the
+// selected system's signatures, so concurrent scouts naming holes in the same
+// system get distinct suggestions rather than colliding.
+const alias_context = computed<AliasSuggestionContext>(() => {
+    const homeSolarsystemId = page.props.map.home_solarsystem_id;
+    const systems = all_map_solarsystems.value;
+    const home = systems.find((system) => system.solarsystem_id === homeSolarsystemId) ?? null;
+    const aliasByMapSolarsystemId = new Map(systems.map((system) => [system.id, system.alias] as const));
+
+    const aliases = buildSuggestionAliasPool({
+        homeMapSolarsystemId: home?.id ?? null,
+        connections: page.props.map.map_connections,
+        systems,
+        selectedSignatures: signatures.value ?? [],
+    });
+
+    return {
+        homeSolarsystemId,
+        homeStaticCodes: (home?.solarsystem.statics ?? []).map((wormhole_static) => wormhole_static.name),
+        homeBranchLetters: usedHomeBranchLetters(home?.id ?? null, page.props.map.map_connections, aliasByMapSolarsystemId),
+        aliases,
+    };
+});
+
+const selected_is_home = computed(() => props.map_solarsystem != null && props.map_solarsystem.solarsystem_id === page.props.map.home_solarsystem_id);
+
+// Suggested aliases for every unconnected, unnamed wormhole in this system,
+// generated in one accumulating pass so siblings get distinct names. Keyed by
+// signature id; rows read their own entry.
+const suggested_aliases = computed<Map<number, string | null>>(() => {
+    const selected = props.map_solarsystem;
+    if (!selected || !is_corp_scheme.value || !map_user_settings.value.suggest_alias_enabled) return new Map();
+
+    // Branch letters reserved on home's own signatures (set before the hole is
+    // connected) also count, so a fresh link off home skips them.
+    const reserved_home_letters = selected_is_home.value
+        ? signatures.value
+              .map((signature) => signature.alias?.trim().replace(/^\+/, '').charAt(0))
+              .filter((letter): letter is string => Boolean(letter))
+        : [];
+
+    const pending = signatures.value
+        .filter((signature) => signature.map_connection_id == null && !signature.alias)
+        .map((signature) => ({
+            id: signature.id,
+            targetClass: signature.signature_type?.target_class ?? null,
+            wormholeCode: signature.wormhole?.name ?? null,
+        }));
+
+    return suggestSignatureAliases({
+        originSolarsystemId: selected.solarsystem_id,
+        originAlias: selected.alias,
+        homeSolarsystemId: alias_context.value.homeSolarsystemId,
+        homeStaticCodes: alias_context.value.homeStaticCodes,
+        homeBranchLetters: [...alias_context.value.homeBranchLetters, ...reserved_home_letters],
+        aliases: alias_context.value.aliases,
+        signatures: pending,
+    });
+});
+
+// Persist each suggestion the moment it is generated, so a scanned wormhole is
+// named with zero clicks — the scout can still overwrite it. Once saved, the
+// signature carries the alias and drops out of the suggestion map, so this
+// writes each signature at most once (the guard set covers transient re-renders
+// and stops a cleared alias from being re-applied against the scout's intent).
+const auto_named = new Set<number>();
+watch(
+    suggested_aliases,
+    (suggestions) => {
+        if (!can_write.value) return;
+        // One write per tick: each save reloads the map, which recomputes the
+        // suggestions and re-fires this watcher for the next one. Sequencing this
+        // way avoids concurrent Inertia visits cancelling one another.
+        for (const [id, suggestion] of suggestions) {
+            if (!suggestion || auto_named.has(id)) continue;
+            const signature = signatures.value.find((candidate) => candidate.id === id);
+            if (!signature || signature.alias) continue;
+            auto_named.add(id);
+            updateSignature(signature, { alias: suggestion });
+            return;
+        }
+    },
+    { immediate: true },
+);
+
+// The selected system's neighbour toward home — the hole back home, which each
+// row marks with a "+".
+const homeward_map_solarsystem_id = computed<number | null>(() => {
+    const selected = props.map_solarsystem;
+    if (!selected) return null;
+    const home = all_map_solarsystems.value.find((system) => system.solarsystem_id === page.props.map.home_solarsystem_id) ?? null;
+    return parentTowardHome(home?.id ?? null, selected.id, page.props.map.map_connections);
 });
 
 function handleSort(column: 'id' | 'category' | 'type' | 'age') {
@@ -215,6 +317,7 @@ function createNewSignature() {
                     <ArrowDown v-if="sortPreferences.column === 'type' && sortPreferences.direction === 'desc'" class="size-3" />
                 </button>
                 <span class="min-w-0 flex-1">Conn</span>
+                <span v-if="is_corp_scheme" class="w-14 shrink-0">Alias</span>
                 <button class="flex w-10 shrink-0 items-center justify-end gap-1 hover:text-foreground" @click="handleSort('age')">
                     <span>Age</span>
                     <ArrowUp v-if="sortPreferences.column === 'age' && sortPreferences.direction === 'asc'" class="size-3" />
@@ -235,6 +338,8 @@ function createNewSignature() {
                     :unconnected_connections="unconnected_connections"
                     :connected_connections="connected_connections"
                     :selected_map_solarsystem="map_solarsystem"
+                    :suggested_alias="suggested_aliases.get(signature.id) ?? null"
+                    :homeward_map_solarsystem_id="homeward_map_solarsystem_id"
                 />
             </template>
             <div v-else class="flex h-full flex-col items-center justify-center gap-2 p-4">

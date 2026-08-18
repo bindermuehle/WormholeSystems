@@ -25,6 +25,7 @@ const { map, canEdit } = defineProps<{
 const aliasSchemeOptions: { value: TAliasScheme; label: string; example: string }[] = [
     { value: 'numeric', label: 'Numeric', example: '11, 12, 13' },
     { value: 'alphabetical', label: 'Alphabetical', example: 'AA, AB, AH1' },
+    { value: 'corp', label: 'Corp chain', example: 'a5s, b3a, aHa' },
 ];
 
 const aliasScheme = ref<TAliasScheme>(map.bookmark_alias_scheme);

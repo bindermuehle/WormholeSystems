@@ -87,15 +87,18 @@ final readonly class StoreTrackingAction
             $target_map_solarsystem = $this->getMapSolarsystemOnMap($origin->map, $to_solarsystem)
                 ?? $this->addSolarsystemToMap($origin, $to_solarsystem);
 
+            $signature = Signature::query()->find($data->signature_id);
+
             /* The alias goes through the update action so the broadcast payload
              * carries it — a raw update() here left other viewers (and the
-             * originator's own echo) with an alias-less system.
+             * originator's own echo) with an alias-less system. When the jump
+             * itself carries no alias we hand off the alias reserved on the
+             * signature before the hole was jumped.
              */
-            if (filled($data->alias)) {
-                $this->updateMapSolarsystemAction->handle($target_map_solarsystem, ['alias' => $data->alias]);
+            $alias = filled($data->alias) ? $data->alias : $signature?->alias;
+            if (filled($alias)) {
+                $this->updateMapSolarsystemAction->handle($target_map_solarsystem, ['alias' => $alias]);
             }
-
-            $signature = Signature::query()->find($data->signature_id);
 
             $mass_status = $data->mass_status ?? $this->getMassStatusForSignature($signature);
             $lifetime_status = $data->lifetime ?? $this->getLifetimeStatusForSignature($signature);
@@ -111,16 +114,18 @@ final readonly class StoreTrackingAction
                 ]
             );
 
-            // Link the signature to the connection if provided
-            if ($data->signature_id) {
+            // Link the signature to the connection if provided. Route through the
+            // model (not a query-builder update) so the Signature::updating hook
+            // fires and drops the reserved alias now carried by the destination
+            // system above.
+            if ($data->signature_id && $signature instanceof Signature) {
                 $signature_update = ['map_connection_id' => $connection->id];
 
-                if ($signature instanceof Signature && $signature->signature_category_id === null) {
+                if ($signature->signature_category_id === null) {
                     $signature_update['signature_category_id'] = $this->getWormholeCategoryId();
                 }
 
-                Signature::query()->where('id', $data->signature_id)
-                    ->update($signature_update);
+                $signature->update($signature_update);
             }
 
         }, 10);

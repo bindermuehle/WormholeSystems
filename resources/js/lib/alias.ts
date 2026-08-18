@@ -1,8 +1,10 @@
+import type { TStringedSolarsystemClass } from '@/types/models';
+
 /**
  * The per-map alias suggestion convention. Kept in sync with the `AliasScheme`
  * enum on the backend.
  */
-export type TAliasScheme = 'numeric' | 'alphabetical';
+export type TAliasScheme = 'numeric' | 'alphabetical' | 'corp';
 
 /**
  * The kind of system an alphabetical suggestion is being generated for. K-space
@@ -203,4 +205,419 @@ export function suggestAlias(params: {
         targetKind: params.targetKind,
         ignoredAlias: params.ignoredAlias,
     });
+}
+
+/*
+ * -----------------------------------------------------------------------------
+ * Corp chain-naming scheme: <branch><type><slot>
+ * -----------------------------------------------------------------------------
+ * A system's alias is three characters:
+ *   - branch: a letter (a, b, c…) assigned per direct link off the home system,
+ *     propagating to every system down that branch at any depth. New links take
+ *     the lowest currently-free letter; letters are reused when a branch dies.
+ *   - type:   the destination class — "1".."6" for C1–C6, capital "H"/"L"/"N"/"P"
+ *     for high/low/null/pochven space.
+ *   - slot:   the lowest free letter making {branch}{type} unique, skipping "s".
+ *     Home's static is the exception and always uses slot "s" (e.g. a5s).
+ * The "+" homeward prefix is a display concern (see the signature table), not
+ * produced here — this generates a destination system's own name.
+ * -----------------------------------------------------------------------------
+ */
+
+const BRANCH_LETTERS = 'abcdefghijklmnopqrstuvwxyz'.split('');
+
+/**
+ * Map a solarsystem class to the scheme's "type" character: C1–C6 → "1".."6",
+ * high/low/null/pochven → "H"/"L"/"N"/"P". Returns null for classes the scheme
+ * does not name (special wormhole classes, unknown).
+ */
+export function classToTypeChar(cls: TStringedSolarsystemClass): string | null {
+    if (/^[1-6]$/.test(cls)) {
+        return cls;
+    }
+
+    switch (cls) {
+        case 'h':
+            return 'H';
+        case 'l':
+            return 'L';
+        case 'n':
+            return 'N';
+        case 'p':
+            return 'P';
+        default:
+            return null;
+    }
+}
+
+/**
+ * The lowest unused branch letter (a, b, c…), given the letters already in use
+ * by the home system's live direct links.
+ */
+export function nextBranchLetter(usedLetters: readonly string[]): string {
+    const used = new Set(usedLetters.map((letter) => letter.toLowerCase()));
+
+    return BRANCH_LETTERS.find((letter) => !used.has(letter)) ?? BRANCH_LETTERS[BRANCH_LETTERS.length - 1];
+}
+
+/**
+ * The lowest unused slot letter for a given branch + type, scanning every alias
+ * on the map. Skips "s" (reserved for the home static). Returns null if the 25
+ * non-static letters are exhausted.
+ */
+export function nextSlotLetter(branch: string, type: string, aliases: readonly string[]): string | null {
+    const prefix = `${branch}${type}`;
+    const used = new Set<string>();
+
+    for (const alias of aliases) {
+        const name = alias.trim().replace(/^\+/, '');
+        if (name.length > prefix.length && name.startsWith(prefix)) {
+            used.add(name.charAt(prefix.length));
+        }
+    }
+
+    return BRANCH_LETTERS.find((letter) => letter !== 's' && !used.has(letter)) ?? null;
+}
+
+export type AliasContext = {
+    /** Alias of the system the hole is scanned in / jumped from. */
+    originAlias: string | null | undefined;
+    /** Whether that origin system is the map's home system. */
+    originIsHome: boolean;
+    /** Class of the destination system being named. */
+    targetClass: TStringedSolarsystemClass;
+    /** Whether this connection is the home system's static (only honoured off home). */
+    isHomeStatic: boolean;
+    /** Branch letters already used by the home system's live direct links. */
+    homeBranchLetters: readonly string[];
+    /**
+     * How many statics home has. Their branch letters are reserved — the "a"
+     * chain always belongs to the static — so a non-static link off home never
+     * takes them, even before the static has been scanned.
+     */
+    homeStaticCount: number;
+    /** Every alias currently on the map, including reserved pre-jump aliases. */
+    aliases: readonly string[];
+};
+
+/**
+ * Generate the corp-scheme alias `<branch><type><slot>` for a newly scanned or
+ * jumped destination system. Returns null when the class isn't named by the
+ * scheme, or a branch letter cannot be determined (a non-home origin with no
+ * alias to inherit from).
+ */
+export function generateAlias(context: AliasContext): string | null {
+    const type = classToTypeChar(context.targetClass);
+    if (type === null) {
+        return null;
+    }
+
+    let branch: string;
+    if (context.originIsHome) {
+        if (context.isHomeStatic) {
+            // The static claims the lowest free branch letter, so the primary
+            // static reads "a…s".
+            branch = nextBranchLetter(context.homeBranchLetters);
+        } else {
+            // Home's static branches are reserved even before the static is
+            // scanned, so a non-static link off home starts past them.
+            const reserved = BRANCH_LETTERS.slice(0, Math.max(0, context.homeStaticCount));
+            branch = nextBranchLetter([...context.homeBranchLetters, ...reserved]);
+        }
+    } else {
+        const inherited = (context.originAlias ?? '').trim().replace(/^\+/, '').charAt(0);
+        if (!inherited) {
+            return null;
+        }
+        branch = inherited;
+    }
+
+    if (context.originIsHome && context.isHomeStatic) {
+        return `${branch}${type}s`;
+    }
+
+    const slot = nextSlotLetter(branch, type, context.aliases);
+    if (slot === null) {
+        return null;
+    }
+
+    return `${branch}${type}${slot}`;
+}
+
+type ConnectionEndpoints = {
+    from_map_solarsystem_id: number;
+    to_map_solarsystem_id: number;
+};
+
+/**
+ * The branch letters currently in use by the home system's direct links — the
+ * first character of each directly-connected system's alias. Feeds
+ * `nextBranchLetter` when naming a brand-new link off home. Connections are
+ * treated as undirected. `homeMapSolarsystemId` is a map_solarsystem id (not a
+ * raw solarsystem id), matching the connection endpoint ids.
+ */
+export function usedHomeBranchLetters(
+    homeMapSolarsystemId: number | null | undefined,
+    connections: readonly ConnectionEndpoints[],
+    aliasByMapSolarsystemId: ReadonlyMap<number, string | null | undefined>,
+): string[] {
+    if (homeMapSolarsystemId == null) {
+        return [];
+    }
+
+    const letters: string[] = [];
+    for (const connection of connections) {
+        let neighbourId: number | null = null;
+        if (connection.from_map_solarsystem_id === homeMapSolarsystemId) {
+            neighbourId = connection.to_map_solarsystem_id;
+        } else if (connection.to_map_solarsystem_id === homeMapSolarsystemId) {
+            neighbourId = connection.from_map_solarsystem_id;
+        }
+
+        if (neighbourId === null) {
+            continue;
+        }
+
+        const letter = aliasByMapSolarsystemId.get(neighbourId)?.trim().replace(/^\+/, '').charAt(0);
+        if (letter) {
+            letters.push(letter);
+        }
+    }
+
+    return letters;
+}
+
+/**
+ * The neighbour of `mapSolarsystemId` that lies one hop closer to home — its
+ * parent in the breadth-first tree rooted at home. The hole to this neighbour is
+ * the way back home, which the signature table marks with a "+". Returns null
+ * when there is no home, the system is home itself, or it is unreachable.
+ * Connections are undirected; ids are map_solarsystem ids.
+ */
+export function parentTowardHome(
+    homeMapSolarsystemId: number | null | undefined,
+    mapSolarsystemId: number | null | undefined,
+    connections: readonly ConnectionEndpoints[],
+): number | null {
+    if (homeMapSolarsystemId == null || mapSolarsystemId == null || homeMapSolarsystemId === mapSolarsystemId) {
+        return null;
+    }
+
+    const neighbours = new Map<number, number[]>();
+    const link = (a: number, b: number): void => {
+        const list = neighbours.get(a) ?? [];
+        list.push(b);
+        neighbours.set(a, list);
+    };
+    for (const connection of connections) {
+        link(connection.from_map_solarsystem_id, connection.to_map_solarsystem_id);
+        link(connection.to_map_solarsystem_id, connection.from_map_solarsystem_id);
+    }
+
+    const parent = new Map<number, number>();
+    const queue = [homeMapSolarsystemId];
+    const visited = new Set<number>([homeMapSolarsystemId]);
+
+    while (queue.length > 0) {
+        const current = queue.shift()!;
+        if (current === mapSolarsystemId) {
+            return parent.get(current) ?? null;
+        }
+        for (const neighbour of neighbours.get(current) ?? []) {
+            if (visited.has(neighbour)) {
+                continue;
+            }
+            visited.add(neighbour);
+            parent.set(neighbour, current);
+            queue.push(neighbour);
+        }
+    }
+
+    return null;
+}
+
+/**
+ * The set of map_solarsystem ids reachable from home over the connection graph
+ * (home included). Used to keep the alias pool honest: a system that has been
+ * rolled off the chain is no longer reachable, so its alias should stop counting
+ * and free up for reuse — matching "letters are reused when a hole vanishes".
+ * Returns null when there is no home, meaning callers should not filter.
+ */
+export function reachableFromHome(homeMapSolarsystemId: number | null | undefined, connections: readonly ConnectionEndpoints[]): Set<number> | null {
+    if (homeMapSolarsystemId == null) {
+        return null;
+    }
+
+    const neighbours = new Map<number, number[]>();
+    const link = (a: number, b: number): void => {
+        const list = neighbours.get(a) ?? [];
+        list.push(b);
+        neighbours.set(a, list);
+    };
+    for (const connection of connections) {
+        link(connection.from_map_solarsystem_id, connection.to_map_solarsystem_id);
+        link(connection.to_map_solarsystem_id, connection.from_map_solarsystem_id);
+    }
+
+    const reachable = new Set<number>([homeMapSolarsystemId]);
+    const queue = [homeMapSolarsystemId];
+    while (queue.length > 0) {
+        const current = queue.shift()!;
+        for (const neighbour of neighbours.get(current) ?? []) {
+            if (reachable.has(neighbour)) {
+                continue;
+            }
+            reachable.add(neighbour);
+            queue.push(neighbour);
+        }
+    }
+
+    return reachable;
+}
+
+/**
+ * Assemble the pool of aliases the suggester must treat as already taken, for a
+ * given selected system. Two sources, de-duplicated:
+ *
+ *  - System aliases, but only for systems still reachable from home. A rolled-off
+ *    (orphaned) system keeps its alias until cleaned up; filtering by reachability
+ *    frees its slot for reuse.
+ *  - Reserved aliases of the selected system's *unconnected* holes only. An
+ *    unconnected hole's reserved alias is its sole record, so concurrent scouts
+ *    naming holes in the same system don't collide. A *connected* hole is
+ *    deliberately excluded: its real alias already lives on its destination
+ *    system (counted above, and reachability-filtered), while its signature.alias
+ *    is a stale leftover from when it was auto-named pre-jump. Counting the
+ *    connected hole double-books the slot — worst for the homeward hole, whose
+ *    leftover (e.g. "a5a") points back at home and silently burns slot "a",
+ *    bumping every later hole of that type to "a5b".
+ */
+export function buildSuggestionAliasPool(input: {
+    homeMapSolarsystemId: number | null | undefined;
+    connections: readonly ConnectionEndpoints[];
+    systems: ReadonlyArray<{ id: number; alias: string | null | undefined }>;
+    selectedSignatures: ReadonlyArray<{ alias: string | null | undefined; map_connection_id: number | null | undefined }>;
+}): string[] {
+    const reachable = reachableFromHome(input.homeMapSolarsystemId, input.connections);
+
+    const systemAliases = input.systems.filter((system) => reachable === null || reachable.has(system.id)).map((system) => system.alias);
+
+    const reservedAliases = input.selectedSignatures.filter((signature) => signature.map_connection_id == null).map((signature) => signature.alias);
+
+    return [...new Set([...systemAliases, ...reservedAliases].filter((alias): alias is string => Boolean(alias)))];
+}
+
+/**
+ * Map-level inputs the signature table needs to suggest chain aliases, computed
+ * once for the whole map and shared by every signature row. Per-signature inputs
+ * (origin, destination class, wormhole code) are derived in the row itself.
+ */
+export type AliasSuggestionContext = {
+    /** The map's home system (raw solarsystem id), or null when unset. */
+    homeSolarsystemId: number | null;
+    /** Wormhole codes of home's statics — used to detect the home static hole. */
+    homeStaticCodes: string[];
+    /** Branch letters already claimed by home's live direct links. */
+    homeBranchLetters: string[];
+    /** Every alias in play on the map, including reserved pre-jump ones. */
+    aliases: string[];
+};
+
+/**
+ * Suggest the chain alias for the destination of a wormhole signature scanned in
+ * a given system. Thin adapter over `generateAlias` that derives `originIsHome`
+ * and detects the home static (the origin is home and the signature's wormhole
+ * code is one of home's static codes). Returns null when the destination class
+ * is unknown/unnamed.
+ */
+export function suggestSignatureAlias(input: {
+    originSolarsystemId: number | null | undefined;
+    originAlias: string | null | undefined;
+    homeSolarsystemId: number | null | undefined;
+    targetClass: TStringedSolarsystemClass | null | undefined;
+    wormholeCode: string | null | undefined;
+    homeStaticCodes: readonly string[];
+    homeBranchLetters: readonly string[];
+    aliases: readonly string[];
+}): string | null {
+    if (!input.targetClass) {
+        return null;
+    }
+
+    const originIsHome = input.originSolarsystemId != null && input.originSolarsystemId === input.homeSolarsystemId;
+    const isHomeStatic = originIsHome && input.wormholeCode != null && input.homeStaticCodes.includes(input.wormholeCode);
+
+    return generateAlias({
+        originAlias: input.originAlias,
+        originIsHome,
+        targetClass: input.targetClass,
+        isHomeStatic,
+        homeBranchLetters: input.homeBranchLetters,
+        homeStaticCount: input.homeStaticCodes.length,
+        aliases: input.aliases,
+    });
+}
+
+/**
+ * Suggest aliases for several wormhole signatures scanned in the same system, in
+ * a single accumulating pass: each suggestion is folded into the alias pool (and,
+ * off home, the branch-letter set) before the next is generated, so siblings get
+ * distinct names instead of all proposing the first free branch/slot. Returns a
+ * map keyed by the caller's signature id; a signature the scheme cannot name maps
+ * to null.
+ *
+ * Home statics are named first so the primary static reads "a…s" — the corp's
+ * convention — rather than losing the "a" branch to whichever hole sorts first.
+ */
+export function suggestSignatureAliases(input: {
+    originSolarsystemId: number | null | undefined;
+    originAlias: string | null | undefined;
+    homeSolarsystemId: number | null | undefined;
+    homeStaticCodes: readonly string[];
+    homeBranchLetters: readonly string[];
+    aliases: readonly string[];
+    signatures: ReadonlyArray<{
+        id: number;
+        targetClass: TStringedSolarsystemClass | null | undefined;
+        wormholeCode: string | null | undefined;
+    }>;
+}): Map<number, string | null> {
+    const originIsHome = input.originSolarsystemId != null && input.originSolarsystemId === input.homeSolarsystemId;
+    const isStatic = (wormholeCode: string | null | undefined): boolean =>
+        originIsHome && wormholeCode != null && input.homeStaticCodes.includes(wormholeCode);
+
+    const ordered = input.signatures
+        .map((signature, index) => ({ signature, index }))
+        .sort((a, b) => {
+            const staticRank = Number(isStatic(b.signature.wormholeCode)) - Number(isStatic(a.signature.wormholeCode));
+            return staticRank !== 0 ? staticRank : a.index - b.index;
+        });
+
+    const pool = [...input.aliases];
+    const branchLetters = [...input.homeBranchLetters];
+    const result = new Map<number, string | null>();
+
+    for (const { signature } of ordered) {
+        const suggestion = suggestSignatureAlias({
+            originSolarsystemId: input.originSolarsystemId,
+            originAlias: input.originAlias,
+            homeSolarsystemId: input.homeSolarsystemId,
+            targetClass: signature.targetClass,
+            wormholeCode: signature.wormholeCode,
+            homeStaticCodes: input.homeStaticCodes,
+            homeBranchLetters: branchLetters,
+            aliases: pool,
+        });
+
+        result.set(signature.id, suggestion);
+
+        if (suggestion) {
+            pool.push(suggestion);
+            if (originIsHome) {
+                branchLetters.push(suggestion.charAt(0));
+            }
+        }
+    }
+
+    return result;
 }
