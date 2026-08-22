@@ -18,12 +18,20 @@ import { useActiveMapCharacter } from '@/composables/useActiveMapCharacter';
 import { useMapUserSettings } from '@/composables/useMapUserSettings';
 import { useShowMap } from '@/composables/useShowMap';
 import usePermission from '@/composables/usePermission';
-import { type AliasSuggestionContext, buildSuggestionAliasPool, parentTowardHome, suggestSignatureAliases, usedHomeBranchLetters } from '@/lib/alias';
+import {
+    type AliasSuggestionContext,
+    buildSuggestionAliasPool,
+    parentTowardHome,
+    reachableFromHome,
+    suggestSignatureAliases,
+    usedHomeBranchLetters,
+} from '@/lib/alias';
+import { installAliasDebug } from '@/lib/aliasDebug';
 import { createSignature, updateMapUserSettings, updateSignature, useMapSolarsystems } from '@/map/api';
 import type { TResolvedSelectedMapSolarsystem } from '@/pages/maps';
 import { useLocalStorage } from '@vueuse/core';
 import { ArrowDown, ArrowUp, CircleHelp, Cloud, Database, Fan, Flag, Gem, Landmark, Rows2, Rows3, Shield, Swords } from 'lucide-vue-next';
-import { type Component, computed, watch } from 'vue';
+import { type Component, computed, onScopeDispose, watch } from 'vue';
 
 const props = defineProps<{
     map_solarsystem: TResolvedSelectedMapSolarsystem | null;
@@ -208,6 +216,31 @@ const homeward_map_solarsystem_id = computed<number | null>(() => {
     const home = all_map_solarsystems.value.find((system) => system.solarsystem_id === page.props.map.home_solarsystem_id) ?? null;
     return parentTowardHome(home?.id ?? null, selected.id, page.props.map.map_connections);
 });
+
+// Console tracing for the automapper: with a system selected, `aliasDebug()`
+// dumps the exact pool, systems, signatures and suggestions it worked from.
+// Reads the context at call time, so the dump is never stale.
+onScopeDispose(
+    installAliasDebug(() => {
+        const home = all_map_solarsystems.value.find((system) => system.solarsystem_id === page.props.map.home_solarsystem_id) ?? null;
+
+        return {
+            scheme: page.props.map.bookmark_alias_scheme,
+            suggestEnabled: map_user_settings.value.suggest_alias_enabled,
+            selected: props.map_solarsystem,
+            homeSolarsystemId: page.props.map.home_solarsystem_id,
+            homeMapSolarsystemId: home?.id ?? null,
+            homeStaticCodes: alias_context.value.homeStaticCodes,
+            homeBranchLetters: alias_context.value.homeBranchLetters,
+            pool: alias_context.value.aliases,
+            systems: all_map_solarsystems.value,
+            connections: page.props.map.map_connections,
+            signatures: signatures.value ?? [],
+            reachable: reachableFromHome(home?.id ?? null, page.props.map.map_connections),
+            suggestions: suggested_aliases.value,
+        };
+    }),
+);
 
 function handleSort(column: 'id' | 'category' | 'type' | 'age') {
     let newDirection: 'asc' | 'desc';
