@@ -485,6 +485,56 @@ describe('buildSuggestionAliasPool', () => {
         });
         expect(result.get(229)).toBe('a5a');
     });
+
+    it('reserves holes named in other systems, so the same slot is not handed out twice', () => {
+        // The box state: a5c is reserved on a hole in a5b(3) while the scout is
+        // scanning in a5a(4). Without the map-wide list the pool sees only
+        // {a5s, a5b, a5a} and hands out "c" again.
+        const pool = buildSuggestionAliasPool({
+            homeMapSolarsystemId: 1,
+            connections: [
+                { from_map_solarsystem_id: 1, to_map_solarsystem_id: 2 },
+                { from_map_solarsystem_id: 2, to_map_solarsystem_id: 3 },
+                { from_map_solarsystem_id: 2, to_map_solarsystem_id: 4 },
+            ],
+            systems: [
+                { id: 1, alias: null }, // home
+                { id: 2, alias: 'a5s' },
+                { id: 3, alias: 'a5b' },
+                { id: 4, alias: 'a5a' }, // selected
+            ],
+            selectedSignatures: [{ alias: 'a5d', map_connection_id: null }],
+            reservedAliases: [{ map_solarsystem_id: 3, alias: 'a5c' }],
+        });
+
+        expect(pool.sort()).toEqual(['a5a', 'a5b', 'a5c', 'a5d', 'a5s']);
+
+        const result = suggestSignatureAliases({
+            originSolarsystemId: 100,
+            originAlias: 'a5a',
+            homeSolarsystemId: 1,
+            homeStaticCodes: ['H296'],
+            homeBranchLetters: ['a'],
+            aliases: pool,
+            signatures: [{ id: 300, targetClass: '5', wormholeCode: 'K162' }],
+        });
+        expect(result.get(300)).toBe('a5e');
+    });
+
+    it('frees a reservation made in a system that has rolled out of the chain', () => {
+        const pool = buildSuggestionAliasPool({
+            homeMapSolarsystemId: 1,
+            connections: [{ from_map_solarsystem_id: 1, to_map_solarsystem_id: 2 }],
+            systems: [
+                { id: 1, alias: null },
+                { id: 2, alias: 'a5s' },
+            ],
+            selectedSignatures: [],
+            reservedAliases: [{ map_solarsystem_id: 9, alias: 'a5c' }],
+        });
+
+        expect(pool.sort()).toEqual(['a5s']);
+    });
 });
 
 describe('first hole of a type in a branch (regression for aLb bug)', () => {

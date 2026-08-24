@@ -93,7 +93,9 @@ export const mapEventHandlers: Record<string, SyncHandler> = {
     [SignaturesChangedEvent]: (store, payload) => {
         const { map_solarsystem_id, signature_counts } = payload as SignaturesChangedPayload;
         store.patchSystemCounts(map_solarsystem_id, signature_counts);
-        return { reloadIfSelected: [map_solarsystem_id] };
+        // Reserved aliases are map-wide: a hole named in any system changes what
+        // the suggester may hand out here, selected or not.
+        return { reload: ['reserved_aliases'], reloadIfSelected: [map_solarsystem_id] };
     },
 
     /** Batch too large for a payload event — one coalesced full-map refetch instead. */
@@ -115,4 +117,5 @@ export const ALL_MAP_PROPS = [
     'map_killmails',
     'ship_history',
     'map_ignored_systems',
+    'reserved_aliases',
 ];

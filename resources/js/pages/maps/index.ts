@@ -62,6 +62,7 @@ export type TShowMapProps = {
     layout: TLayout;
     map_user_settings: TMapUserSetting;
     ignored_systems: number[];
+    reserved_aliases: TReservedAlias[];
     tracking_origin?: TSelectedMapSolarsystem | null;
     tracking_target?: TTrackingTarget | null;
     eve_scout_connections?: TEveScoutConnection[];
@@ -80,6 +81,16 @@ export type TRaidableSkyhook = {
 
 export type TTrackingTarget = {
     solarsystem_id: number;
+};
+
+/**
+ * An alias claimed by a scanned-but-not-yet-connected hole, anywhere on the map.
+ * The system id lets the alias suggester ignore reservations made in systems that
+ * have rolled out of the chain.
+ */
+export type TReservedAlias = {
+    map_solarsystem_id: number;
+    alias: string;
 };
 
 export type TMapSolarsystemBase = {

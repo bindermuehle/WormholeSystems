@@ -137,6 +137,7 @@ const alias_context = computed<AliasSuggestionContext>(() => {
         connections: page.props.map.map_connections,
         systems,
         selectedSignatures: signatures.value ?? [],
+        reservedAliases: page.props.reserved_aliases,
     });
 
     return {
@@ -233,6 +234,7 @@ onScopeDispose(
             homeStaticCodes: alias_context.value.homeStaticCodes,
             homeBranchLetters: alias_context.value.homeBranchLetters,
             pool: alias_context.value.aliases,
+            reservedAliases: page.props.reserved_aliases,
             systems: all_map_solarsystems.value,
             connections: page.props.map.map_connections,
             signatures: signatures.value ?? [],

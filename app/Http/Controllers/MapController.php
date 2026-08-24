@@ -13,6 +13,7 @@ use App\Features\MapCharactersFeature;
 use App\Features\MapKillmailsFeature;
 use App\Features\MapNavigationFeature;
 use App\Features\MapPermissionsFeature;
+use App\Features\MapReservedAliasesFeature;
 use App\Features\MapSelectionFeature;
 use App\Features\MapSettingsFeature;
 use App\Features\MapSkyhooksFeature;
@@ -85,6 +86,7 @@ final class MapController extends Controller
             ->with(new EveScoutConnectionsFeature($this->eve_scout_service))
             ->with(new MapKillmailsFeature($map, $settings->killmail_filter ?? KillmailFilter::All, $hiddenCards))
             ->with(new ShipHistoryFeature($user, $canViewCharacters, $hiddenCards))
+            ->with(new MapReservedAliasesFeature($map))
             ->with(new MapNavigationFeature($map, $hiddenCards))
             ->with(new ThreatAnalysisFeature($selected_map_solarsystem, $hiddenCards))
             ->with(new MapSkyhooksFeature($hiddenCards));

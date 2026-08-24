@@ -17,7 +17,7 @@ export function pasteSignatures(map_solarsystem_id: number, signatures: TRawSign
         {
             preserveScroll: true,
             preserveState: true,
-            only: ['map', 'selected_map_solarsystem'],
+            only: ['map', 'selected_map_solarsystem', 'reserved_aliases'],
             onError: () => router.reload({ only: ['map'] }),
         },
     );

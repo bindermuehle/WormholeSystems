@@ -46,7 +46,13 @@ export function useTracking() {
         );
     });
 
-    const known_aliases = computed(() => map_solarsystems.value.map((s) => s.alias).filter((alias): alias is string => Boolean(alias)));
+    // Aliases already in play: those on the map's systems, plus the ones held by
+    // holes scanned anywhere on the map but not yet jumped. Without the latter a
+    // jump can be named with a slot a scout has already reserved elsewhere.
+    const known_aliases = computed(() => [
+        ...map_solarsystems.value.map((s) => s.alias).filter((alias): alias is string => Boolean(alias)),
+        ...page.props.reserved_aliases.map((reserved) => reserved.alias),
+    ]);
 
     // Pre-fill the signature dialog's alias field. An alias the target already
     // carries on the map wins; otherwise we guess the next chain alias.

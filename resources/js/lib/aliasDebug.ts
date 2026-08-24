@@ -44,6 +44,7 @@ export type AliasDebugContext = {
     homeStaticCodes: readonly string[];
     homeBranchLetters: readonly string[];
     pool: readonly string[];
+    reservedAliases: ReadonlyArray<{ map_solarsystem_id: number; alias: string }>;
     systems: readonly DebugSystem[];
     connections: readonly DebugConnection[];
     signatures: readonly DebugSignature[];
@@ -71,6 +72,9 @@ function snapshot(context: AliasDebugContext) {
         homeStaticCodes: [...context.homeStaticCodes],
         homeBranchLetters: [...context.homeBranchLetters],
         pool: [...context.pool],
+        // Map-wide hole reservations before the reachability filter — compare
+        // against `pool` to see which ones were dropped.
+        reservedAliases: context.reservedAliases.map((reserved) => [reserved.map_solarsystem_id, reserved.alias]),
         systems: context.systems.map((system) => ({
             id: system.id,
             sys: system.solarsystem_id,

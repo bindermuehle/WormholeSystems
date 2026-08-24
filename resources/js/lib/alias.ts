@@ -477,34 +477,52 @@ export function reachableFromHome(homeMapSolarsystemId: number | null | undefine
 
 /**
  * Assemble the pool of aliases the suggester must treat as already taken, for a
- * given selected system. Two sources, de-duplicated:
+ * given selected system. Three sources, de-duplicated:
  *
  *  - System aliases, but only for systems still reachable from home. A rolled-off
  *    (orphaned) system keeps its alias until cleaned up; filtering by reachability
  *    frees its slot for reuse.
- *  - Reserved aliases of the selected system's *unconnected* holes only. An
- *    unconnected hole's reserved alias is its sole record, so concurrent scouts
- *    naming holes in the same system don't collide. A *connected* hole is
- *    deliberately excluded: its real alias already lives on its destination
- *    system (counted above, and reachability-filtered), while its signature.alias
- *    is a stale leftover from when it was auto-named pre-jump. Counting the
- *    connected hole double-books the slot — worst for the homeward hole, whose
- *    leftover (e.g. "a5a") points back at home and silently burns slot "a",
- *    bumping every later hole of that type to "a5b".
+ *  - Reserved aliases of *unconnected* holes across the whole map (the
+ *    `reserved_aliases` prop), reachability-filtered the same way. An unconnected
+ *    hole's reserved alias is its sole record, so without this a hole named in
+ *    one system leaves its slot free everywhere else and the next scan elsewhere
+ *    hands out the same name again.
+ *  - The selected system's own unconnected holes, read locally: the freshest copy
+ *    right after an edit, before the map-wide prop has been refetched.
+ *
+ * A *connected* hole is deliberately excluded from both signature sources: its
+ * real alias already lives on its destination system (counted above, and
+ * reachability-filtered), while its signature.alias is a stale leftover from when
+ * it was auto-named pre-jump. Counting the connected hole double-books the slot —
+ * worst for the homeward hole, whose leftover (e.g. "a5a") points back at home
+ * and silently burns slot "a", bumping every later hole of that type to "a5b".
  */
 export function buildSuggestionAliasPool(input: {
     homeMapSolarsystemId: number | null | undefined;
     connections: readonly ConnectionEndpoints[];
     systems: ReadonlyArray<{ id: number; alias: string | null | undefined }>;
     selectedSignatures: ReadonlyArray<{ alias: string | null | undefined; map_connection_id: number | null | undefined }>;
+    reservedAliases?: ReadonlyArray<{ map_solarsystem_id: number; alias: string }>;
 }): string[] {
     const reachable = reachableFromHome(input.homeMapSolarsystemId, input.connections);
+    const isReachable = (mapSolarsystemId: number): boolean => reachable === null || reachable.has(mapSolarsystemId);
 
-    const systemAliases = input.systems.filter((system) => reachable === null || reachable.has(system.id)).map((system) => system.alias);
+    const systemAliases = input.systems.filter((system) => isReachable(system.id)).map((system) => system.alias);
 
-    const reservedAliases = input.selectedSignatures.filter((signature) => signature.map_connection_id == null).map((signature) => signature.alias);
+    // Map-wide reservations, reachability-filtered like system aliases: a hole
+    // named in a system that has since rolled out of the chain gives its slot
+    // back. The selected system's own signatures are read locally as well —
+    // they are the freshest copy right after an edit, and the union only ever
+    // marks slots taken, so overlap is harmless.
+    const mapReservedAliases = (input.reservedAliases ?? [])
+        .filter((reserved) => isReachable(reserved.map_solarsystem_id))
+        .map((reserved) => reserved.alias);
 
-    return [...new Set([...systemAliases, ...reservedAliases].filter((alias): alias is string => Boolean(alias)))];
+    const selectedReservedAliases = input.selectedSignatures
+        .filter((signature) => signature.map_connection_id == null)
+        .map((signature) => signature.alias);
+
+    return [...new Set([...systemAliases, ...mapReservedAliases, ...selectedReservedAliases].filter((alias): alias is string => Boolean(alias)))];
 }
 
 /**
