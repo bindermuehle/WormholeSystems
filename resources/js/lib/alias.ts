@@ -231,6 +231,27 @@ const BRANCH_LETTERS = 'abcdefghijklmnopqrstuvwxyz'.split('');
  * high/low/null/pochven → "H"/"L"/"N"/"P". Returns null for classes the scheme
  * does not name (special wormhole classes, unknown).
  */
+/**
+ * The class the alias scheme should name a destination by.
+ *
+ * Pochven is its own destination as far as the chain is concerned (the scheme
+ * reserves "P" for it), but nothing in the data says so: the three Pochven
+ * holes carry `target_class: 'n'` with "Pochven" only in `extra`, and a Pochven
+ * system's own class comes from its security status, which lands on null-sec
+ * too. Without this a Pochven exit is named bNa, indistinguishable from any
+ * null-sec hole.
+ */
+export function aliasClassFor(
+    targetClass: TStringedSolarsystemClass | null | undefined,
+    extra: string | null | undefined,
+): TStringedSolarsystemClass | null {
+    if (extra?.toLowerCase() === 'pochven') {
+        return 'p';
+    }
+
+    return targetClass ?? null;
+}
+
 export function classToTypeChar(cls: TStringedSolarsystemClass): string | null {
     if (/^[1-6]$/.test(cls)) {
         return cls;

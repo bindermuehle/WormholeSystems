@@ -20,6 +20,7 @@ import { useShowMap } from '@/composables/useShowMap';
 import usePermission from '@/composables/usePermission';
 import {
     type AliasSuggestionContext,
+    aliasClassFor,
     buildSuggestionAliasPool,
     parentTowardHome,
     reachableFromHome,
@@ -169,7 +170,7 @@ const suggested_aliases = computed<Map<number, string | null>>(() => {
         .filter((signature) => signature.map_connection_id == null && !signature.alias)
         .map((signature) => ({
             id: signature.id,
-            targetClass: signature.signature_type?.target_class ?? null,
+            targetClass: aliasClassFor(signature.signature_type?.target_class, signature.signature_type?.extra),
             wormholeCode: signature.wormhole?.name ?? null,
         }));
 

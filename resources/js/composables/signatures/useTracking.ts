@@ -4,7 +4,7 @@ import { useMapUserSettings } from '@/composables/useMapUserSettings';
 import { useShowMap } from '@/composables/useShowMap';
 import { useStaticData } from '@/composables/useStaticData';
 import { useTrackingSystems } from '@/composables/useTrackingSystems';
-import { aliasTargetKind, suggestAlias, suggestSignatureAlias, usedHomeBranchLetters } from '@/lib/alias';
+import { aliasClassFor, aliasTargetKind, suggestAlias, suggestSignatureAlias, usedHomeBranchLetters } from '@/lib/alias';
 import { buildSignatureBookmark } from '@/lib/bookmark';
 import { groupSignatureOptions } from '@/lib/signatureCompatibility';
 import { isWormholeSystem } from '@/lib/solarsystem';
@@ -80,7 +80,7 @@ export function useTracking() {
                 originSolarsystemId: origin.solarsystem_id,
                 originAlias: origin.alias,
                 homeSolarsystemId: page.props.map.home_solarsystem_id,
-                targetClass: target.class,
+                targetClass: aliasClassFor(target.class, target.region?.name),
                 wormholeCode: null,
                 homeStaticCodes: (home?.solarsystem.statics ?? []).map((wormhole_static) => wormhole_static.name),
                 homeBranchLetters: usedHomeBranchLetters(home?.id ?? null, page.props.map.map_connections, alias_by_map_solarsystem_id),

@@ -1,4 +1,5 @@
 import {
+    aliasClassFor,
     buildSuggestionAliasPool,
     classToTypeChar,
     generateAlias,
@@ -687,5 +688,37 @@ describe('suggestSignatureAliases', () => {
 
         expect(result.get(1)).toBeNull();
         expect(result.get(2)).toBe('a5s');
+    });
+});
+
+describe('aliasClassFor (Pochven)', () => {
+    it("names a Pochven destination P, though its class says null-sec", () => {
+        // Both inputs land here as ('n', 'Pochven'): the three Pochven holes
+        // (C729/F216/U372) carry target_class 'n' with "Pochven" only in
+        // `extra`, and a Pochven system's own class comes from security status,
+        // which is null-sec too. Its region name is what identifies it.
+        expect(aliasClassFor('n', 'Pochven')).toBe('p');
+        expect(aliasClassFor('n', 'pochven')).toBe('p');
+    });
+
+    it('leaves every other destination alone', () => {
+        expect(aliasClassFor('n', 'Catch')).toBe('n');
+        expect(aliasClassFor('h', null)).toBe('h');
+        expect(aliasClassFor('5', undefined)).toBe('5');
+        expect(aliasClassFor(null, null)).toBeNull();
+    });
+
+    it('produces the P slot end to end', () => {
+        expect(
+            generateAlias({
+                originAlias: 'b5s',
+                originIsHome: false,
+                targetClass: aliasClassFor('n', 'Pochven')!,
+                isHomeStatic: false,
+                homeBranchLetters: [],
+                homeStaticCount: 1,
+                aliases: [],
+            }),
+        ).toBe('bPa');
     });
 });
