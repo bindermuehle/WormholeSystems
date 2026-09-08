@@ -347,29 +347,30 @@ const selectedShipSizeOption = computed(() => shipSizeOptions.find((option) => o
                     </div>
                     <RadioGroup
                         ref="signatureList"
-                        class="grid h-64 grid-cols-[auto_auto_auto_1fr] content-start gap-0 gap-x-4 overflow-y-auto"
+                        class="grid h-64 grid-cols-[auto_auto_auto_auto_1fr] content-start gap-0 gap-x-4 overflow-y-auto"
                         v-model:model-value="selectedSignatureId"
                         @keydown.enter="handleConfirm"
                     >
                         <label
-                            class="col-span-4 grid grid-cols-subgrid items-center-safe rounded-sm p-2 text-left text-xs transition-colors hover:bg-muted/40 has-data-[state=checked]:bg-muted/60"
+                            class="col-span-5 grid grid-cols-subgrid items-center-safe rounded-sm p-2 text-left text-xs transition-colors hover:bg-muted/40 has-data-[state=checked]:bg-muted/60"
                         >
                             <RadioGroupItem :value="null" />
                             <div class="font-medium">Unknown</div>
                             <div class="text-muted-foreground">—</div>
                             <div />
+                            <div />
                         </label>
                         <template v-for="section in sections" :key="section.key">
                             <div
                                 v-if="section.label && section.options.length"
-                                class="col-span-4 mt-2 border-t border-border/50 px-2 pt-2.5 pb-1 font-mono text-[10px] tracking-wider text-muted-foreground uppercase"
+                                class="col-span-5 mt-2 border-t border-border/50 px-2 pt-2.5 pb-1 font-mono text-[10px] tracking-wider text-muted-foreground uppercase"
                             >
                                 {{ section.label }}
                             </div>
                             <label
                                 v-for="option in section.options"
                                 :key="option.id"
-                                class="col-span-4 grid grid-cols-subgrid items-center-safe rounded-sm p-2 text-left text-xs transition-colors hover:bg-muted/40 has-data-[state=checked]:bg-muted/60 has-data-[state=checked]:opacity-100 data-demoted:opacity-60"
+                                class="col-span-5 grid grid-cols-subgrid items-center-safe rounded-sm p-2 text-left text-xs transition-colors hover:bg-muted/40 has-data-[state=checked]:bg-muted/60 has-data-[state=checked]:opacity-100 data-demoted:opacity-60"
                                 :data-demoted="Data(section.key !== 'likely')"
                             >
                                 <RadioGroupItem :value="option.id" />
@@ -377,12 +378,13 @@ const selectedShipSizeOption = computed(() => shipSizeOptions.find((option) => o
                                 <WormholeOption :wormhole="option.signature_type" v-if="option.signature_type" />
                                 <div class="text-muted-foreground" v-else-if="option.raw_type_name">{{ option.raw_type_name }}</div>
                                 <div class="text-muted-foreground" v-else>Unknown</div>
+                                <div class="font-mono text-sky-300">{{ option.alias }}</div>
                                 <div class="truncate text-right text-xs text-muted-foreground">
                                     <template v-if="destinationLabels.has(option.id)">→ {{ destinationLabels.get(option.id) }}</template>
                                 </div>
                             </label>
                         </template>
-                        <div v-if="search && !filtered.length" class="col-span-4 px-2 py-3 text-xs text-muted-foreground">
+                        <div v-if="search && !filtered.length" class="col-span-5 px-2 py-3 text-xs text-muted-foreground">
                             No signatures match "{{ search }}"
                         </div>
                     </RadioGroup>
