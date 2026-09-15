@@ -216,9 +216,13 @@ export function suggestAlias(params: {
  *     propagating to every system down that branch at any depth. New links take
  *     the lowest currently-free letter; letters are reused when a branch dies.
  *   - type:   the destination class — "1".."6" for C1–C6, capital "H"/"L"/"N"/"P"
- *     for high/low/null/pochven space.
+ *     for high/low/null/pochven space, "T" for Thera, "D" for any drifter
+ *     system (C14–C18, one character for all five) and "13" for shattered.
  *   - slot:   the lowest free letter making {branch}{type} unique, skipping "s".
  *     Home's static is the exception and always uses slot "s" (e.g. a5s).
+ * Shattered is the one two-character type, so its aliases run to four characters
+ * ("a13a"). Nothing reads an alias by fixed position and a slot is always a
+ * letter, so "a13a" can never be mistaken for a C1 holding slot "3".
  * The "+" homeward prefix is a display concern (see the signature table), not
  * produced here — this generates a destination system's own name.
  * -----------------------------------------------------------------------------
@@ -226,11 +230,6 @@ export function suggestAlias(params: {
 
 const BRANCH_LETTERS = 'abcdefghijklmnopqrstuvwxyz'.split('');
 
-/**
- * Map a solarsystem class to the scheme's "type" character: C1–C6 → "1".."6",
- * high/low/null/pochven → "H"/"L"/"N"/"P". Returns null for classes the scheme
- * does not name (special wormhole classes, unknown).
- */
 /**
  * The class the alias scheme should name a destination by.
  *
@@ -252,6 +251,22 @@ export function aliasClassFor(
     return targetClass ?? null;
 }
 
+/**
+ * Map a solarsystem class to the scheme's "type" characters: C1–C6 → "1".."6",
+ * high/low/null/pochven → "H"/"L"/"N"/"P", Thera → "T", drifter (C14–C18) → "D",
+ * shattered (C13) → "13". Returns null for classes the scheme does not name
+ * (abyssal C19–C23, unknown).
+ *
+ * All five drifter classes share one character. The scheme has a single slot
+ * for the type, and telling Sentinel from Vidette by name is not worth spending
+ * four more letters on — the destination system is one click away on the map.
+ * This matches what other mappers do: Wanderer also labels all five "Drifter".
+ *
+ * Shattered keeps its class number instead of taking a letter: "S" would read
+ * as the reserved "s" static slot, and C13 is the only class the number applies
+ * to, since C14–C18 are the drifters covered by "D" above. This is the only
+ * type longer than one character.
+ */
 export function classToTypeChar(cls: TStringedSolarsystemClass): string | null {
     if (/^[1-6]$/.test(cls)) {
         return cls;
@@ -266,6 +281,16 @@ export function classToTypeChar(cls: TStringedSolarsystemClass): string | null {
             return 'N';
         case 'p':
             return 'P';
+        case '12':
+            return 'T';
+        case '13':
+            return '13';
+        case '14':
+        case '15':
+        case '16':
+        case '17':
+        case '18':
+            return 'D';
         default:
             return null;
     }

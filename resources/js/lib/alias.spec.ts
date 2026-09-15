@@ -215,9 +215,35 @@ describe('classToTypeChar', () => {
         expect(classToTypeChar('p')).toBe('P');
     });
 
+    it('maps Thera to "T"', () => {
+        expect(classToTypeChar('12')).toBe('T');
+    });
+
+    it('maps shattered to its class number, the only two-character type', () => {
+        expect(classToTypeChar('13')).toBe('13');
+    });
+
+    it('maps every drifter class to a single "D"', () => {
+        for (const cls of ['14', '15', '16', '17', '18'] as const) {
+            expect(classToTypeChar(cls)).toBe('D');
+        }
+    });
+
     it('returns null for classes the scheme does not name', () => {
         expect(classToTypeChar('unknown')).toBeNull();
-        expect(classToTypeChar('13')).toBeNull();
+        for (const cls of ['19', '20', '21', '22', '23'] as const) {
+            expect(classToTypeChar(cls)).toBeNull();
+        }
+    });
+
+    it('never emits a lower-case type, so no type can read as a slot letter', () => {
+        // Slots are always lower-case letters; types are digits or upper-case.
+        const types = ['1', '2', '3', '4', '5', '6', 'h', 'l', 'n', 'p', '12', '13', '14'] as const;
+        for (const cls of types) {
+            const type = classToTypeChar(cls);
+            expect(type).not.toBeNull();
+            expect(type).toBe(type!.toUpperCase());
+        }
     });
 });
 
@@ -300,6 +326,33 @@ describe('generateAlias', () => {
     it('names k-space with a capital type char', () => {
         expect(generateAlias({ ...base, targetClass: 'h', originAlias: 'a5s', aliases: ['a5s'] })).toBe('aHa');
         expect(generateAlias({ ...base, targetClass: 'n', originAlias: 'a5s', aliases: ['a5s'] })).toBe('aNa');
+    });
+
+    it('names Thera, shattered and drifter destinations', () => {
+        expect(generateAlias({ ...base, targetClass: '12', originAlias: 'a5s', aliases: ['a5s'] })).toBe('aTa');
+        expect(generateAlias({ ...base, targetClass: '13', originAlias: 'a5s', aliases: ['a5s'] })).toBe('a13a');
+        expect(generateAlias({ ...base, targetClass: '15', originAlias: 'a5s', aliases: ['a5s'] })).toBe('aDa');
+    });
+
+    it('pools every drifter class into one "D" slot sequence', () => {
+        // Sentinel (14) and Redoubt (18) are different systems but share the
+        // type char, so the second one must take the next slot, not reuse "a".
+        expect(generateAlias({ ...base, targetClass: '18', originAlias: 'a5s', aliases: ['a5s', 'aDa'] })).toBe('aDb');
+    });
+
+    it('advances the slot for a second shattered off the same branch', () => {
+        expect(generateAlias({ ...base, targetClass: '13', originAlias: 'a5s', aliases: ['a5s', 'a13a'] })).toBe('a13b');
+    });
+
+    it('gives a shattered home static the reserved "s" slot', () => {
+        expect(generateAlias({ ...base, originIsHome: true, isHomeStatic: true, targetClass: '13', originAlias: null })).toBe('a13s');
+    });
+
+    it('does not let a shattered alias consume a C1 slot, or the reverse', () => {
+        // "a13a" starts with the C1 prefix "a1", but a slot is always a letter,
+        // so the "3" it contributes can never block a real C1 slot.
+        expect(generateAlias({ ...base, targetClass: '1', originAlias: 'a5s', aliases: ['a5s', 'a13a'] })).toBe('a1a');
+        expect(generateAlias({ ...base, targetClass: '13', originAlias: 'a5s', aliases: ['a5s', 'a1a'] })).toBe('a13a');
     });
 
     it('inherits the branch letter from the origin at any depth', () => {
@@ -692,7 +745,7 @@ describe('suggestSignatureAliases', () => {
 });
 
 describe('aliasClassFor (Pochven)', () => {
-    it("names a Pochven destination P, though its class says null-sec", () => {
+    it('names a Pochven destination P, though its class says null-sec', () => {
         // Both inputs land here as ('n', 'Pochven'): the three Pochven holes
         // (C729/F216/U372) carry target_class 'n' with "Pochven" only in
         // `extra`, and a Pochven system's own class comes from security status,
