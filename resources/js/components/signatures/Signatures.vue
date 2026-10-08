@@ -174,6 +174,14 @@ const suggested_aliases = computed<Map<number, string | null>>(() => {
             wormholeCode: signature.wormhole?.name ?? null,
         }));
 
+    // A static that is already named or connected has left `pending`, but it
+    // still owns the "s" slot. Without this, a second hole of the same type
+    // scanned later would be read as the static and take "s" again.
+    const claimed_static_codes = signatures.value
+        .filter((signature) => signature.map_connection_id != null || Boolean(signature.alias))
+        .map((signature) => signature.wormhole?.name)
+        .filter((code): code is string => Boolean(code));
+
     return suggestSignatureAliases({
         originSolarsystemId: selected.solarsystem_id,
         originAlias: selected.alias,
@@ -181,6 +189,7 @@ const suggested_aliases = computed<Map<number, string | null>>(() => {
         homeStaticCodes: alias_context.value.homeStaticCodes,
         homeBranchLetters: [...alias_context.value.homeBranchLetters, ...reserved_home_letters],
         aliases: alias_context.value.aliases,
+        claimedStaticCodes: claimed_static_codes,
         signatures: pending,
     });
 });

@@ -603,13 +603,24 @@ export function suggestSignatureAlias(input: {
     homeStaticCodes: readonly string[];
     homeBranchLetters: readonly string[];
     aliases: readonly string[];
+    /**
+     * Whether this signature is home's static, when the caller already knows.
+     *
+     * Left unset, it falls back to matching the wormhole code against
+     * `homeStaticCodes`, which cannot tell home's static apart from a second,
+     * wandering hole of the same type: a C5 home with an H296 static sees every
+     * H296 as that static and hands each one the reserved "s" slot. Callers
+     * naming a whole system at once claim each static code exactly once and pass
+     * the answer here instead.
+     */
+    isHomeStatic?: boolean;
 }): string | null {
     if (!input.targetClass) {
         return null;
     }
 
     const originIsHome = input.originSolarsystemId != null && input.originSolarsystemId === input.homeSolarsystemId;
-    const isHomeStatic = originIsHome && input.wormholeCode != null && input.homeStaticCodes.includes(input.wormholeCode);
+    const isHomeStatic = input.isHomeStatic ?? (originIsHome && input.wormholeCode != null && input.homeStaticCodes.includes(input.wormholeCode));
 
     return generateAlias({
         originAlias: input.originAlias,
@@ -640,6 +651,13 @@ export function suggestSignatureAliases(input: {
     homeStaticCodes: readonly string[];
     homeBranchLetters: readonly string[];
     aliases: readonly string[];
+    /**
+     * Static codes already spoken for by a signature that is named or connected
+     * — the static was scanned on an earlier pass and has dropped out of
+     * `signatures`. Without these a newly scanned hole of the same type would
+     * claim the "s" slot a second time.
+     */
+    claimedStaticCodes?: readonly string[];
     signatures: ReadonlyArray<{
         id: number;
         targetClass: TStringedSolarsystemClass | null | undefined;
@@ -647,13 +665,37 @@ export function suggestSignatureAliases(input: {
     }>;
 }): Map<number, string | null> {
     const originIsHome = input.originSolarsystemId != null && input.originSolarsystemId === input.homeSolarsystemId;
-    const isStatic = (wormholeCode: string | null | undefined): boolean =>
-        originIsHome && wormholeCode != null && input.homeStaticCodes.includes(wormholeCode);
+
+    // Home's statics, as a pool each hole draws from once. Matching on the code
+    // alone is not enough: a C5 home with an H296 static can also roll a second,
+    // wandering H296, and only one of them is the static. The first one scanned
+    // takes the reserved "s" slot and the rest are named like any other hole.
+    const unclaimedStatics = originIsHome ? [...input.homeStaticCodes] : [];
+    for (const code of input.claimedStaticCodes ?? []) {
+        const at = unclaimedStatics.indexOf(code);
+        if (at !== -1) {
+            unclaimedStatics.splice(at, 1);
+        }
+    }
+
+    const claimStatic = (wormholeCode: string | null | undefined): boolean => {
+        if (wormholeCode == null) return false;
+        const at = unclaimedStatics.indexOf(wormholeCode);
+        if (at === -1) return false;
+        unclaimedStatics.splice(at, 1);
+        return true;
+    };
+
+    // Statics are named first so the primary static reads "a…s" rather than
+    // losing the "a" branch to whichever hole sorts first. A code still in the
+    // pool ranks as a static here; which of two identical codes actually claims
+    // it is settled below, in scan order.
+    const couldBeStatic = (wormholeCode: string | null | undefined): boolean => wormholeCode != null && unclaimedStatics.includes(wormholeCode);
 
     const ordered = input.signatures
         .map((signature, index) => ({ signature, index }))
         .sort((a, b) => {
-            const staticRank = Number(isStatic(b.signature.wormholeCode)) - Number(isStatic(a.signature.wormholeCode));
+            const staticRank = Number(couldBeStatic(b.signature.wormholeCode)) - Number(couldBeStatic(a.signature.wormholeCode));
             return staticRank !== 0 ? staticRank : a.index - b.index;
         });
 
@@ -671,6 +713,7 @@ export function suggestSignatureAliases(input: {
             homeStaticCodes: input.homeStaticCodes,
             homeBranchLetters: branchLetters,
             aliases: pool,
+            isHomeStatic: claimStatic(signature.wormholeCode),
         });
 
         result.set(signature.id, suggestion);

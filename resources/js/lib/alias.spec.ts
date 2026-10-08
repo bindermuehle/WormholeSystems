@@ -701,6 +701,49 @@ describe('suggestSignatureAliases', () => {
         expect(result.get(2)).toBe('b4a');
     });
 
+    it('only lets one hole of the static type claim the reserved "s" slot', () => {
+        // A C5 home with an H296 static can also roll a second, wandering H296.
+        // Only the static gets "s"; the wanderer is named like any other hole.
+        const result = suggestSignatureAliases({
+            ...home,
+            homeStaticCodes: ['H296'],
+            signatures: [
+                { id: 1, targetClass: '5', wormholeCode: 'H296' }, // the static
+                { id: 2, targetClass: '5', wormholeCode: 'H296' }, // a wandering H296
+            ],
+        });
+
+        expect(result.get(1)).toBe('a5s');
+        expect(result.get(2)).toBe('b5a');
+    });
+
+    it('does not re-issue "s" when the static is already named or connected', () => {
+        const result = suggestSignatureAliases({
+            ...home,
+            homeStaticCodes: ['H296'],
+            homeBranchLetters: ['a'],
+            aliases: ['a5s'],
+            claimedStaticCodes: ['H296'],
+            signatures: [{ id: 2, targetClass: '5', wormholeCode: 'H296' }],
+        });
+
+        expect(result.get(2)).toBe('b5a');
+    });
+
+    it('still gives each of two different statics its own "s"', () => {
+        const result = suggestSignatureAliases({
+            ...home,
+            homeStaticCodes: ['H296', 'D382'],
+            signatures: [
+                { id: 1, targetClass: '5', wormholeCode: 'H296' },
+                { id: 2, targetClass: '2', wormholeCode: 'D382' },
+            ],
+        });
+
+        expect(result.get(1)).toBe('a5s');
+        expect(result.get(2)).toBe('b2s');
+    });
+
     it('advances the slot for sibling holes down the same branch off a non-home system', () => {
         const result = suggestSignatureAliases({
             originSolarsystemId: 31000010,
