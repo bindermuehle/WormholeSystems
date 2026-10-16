@@ -11,6 +11,22 @@ export type TRawSignature = {
     created_at?: string;
 };
 
+/**
+ * Probe scanner groups that are not signatures.
+ *
+ * Combat probes list ships, structures, drones and deployables in the same
+ * window as signatures, and those rows carry scan ids in the same format, so
+ * copying the whole result list used to add them to the system as signatures.
+ * The group column is the only thing that tells them apart.
+ *
+ * This rejects known groups rather than accepting only the two signature ones:
+ * a localised client reports its group names translated, and an accept list
+ * would throw away every row for those players. They already lose the category
+ * lookup, which matches on English names, but the signature ids are still
+ * worth keeping.
+ */
+const nonSignatureGroups = new Set(['ship', 'structure', 'drone', 'deployable', 'charge', 'starbase', 'celestial', 'entity', 'fighter']);
+
 class SignatureParser {
     parseSignatures(text: string): TRawSignature[] {
         if (!text) {
@@ -30,7 +46,11 @@ class SignatureParser {
             return null;
         }
 
-        const [signature_id, _, category_name, type_name] = signature;
+        const [signature_id, group_name, category_name, type_name] = signature;
+
+        if (this.isNonSignatureGroup(group_name)) {
+            return null;
+        }
 
         if (!signature_id) {
             toast.error('Invalid signature format. Signature ID is required.');
@@ -51,6 +71,10 @@ class SignatureParser {
             raw_type_name,
             created_at: new UTCDate().toISOString(),
         };
+    }
+
+    isNonSignatureGroup(groupName: string): boolean {
+        return nonSignatureGroups.has(groupName?.trim().toLowerCase());
     }
 
     getCategory(categoryName: string): TSignatureCategory | null {
